@@ -1,41 +1,59 @@
 import React, { useState, useEffect } from 'react';
 
-export default function SensorInfo() {
-  const [data, setData] = useState(null);
-  const [status, setStatus] = useState('connecting'); // 'connecting' | 'open' | 'error'
+export default function SensorInfo({ plantId }) {
+  const [data, setData]   = useState(null);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
-    const url = window.location.origin.replace(/^http/, 'ws') + '/ws/sensors';
-    const ws  = new WebSocket(url);
+    if (plantId < 0) {
+      setData(null);
+      setError(false);
+      return;
+    }
+    setData(null);
+    setError(false);
 
-    ws.onopen = () => setStatus('open');
-    ws.onmessage = e => {
-      try {
-        setData(JSON.parse(e.data));
-      } catch {
-        console.warn('Invalid JSON from sensor', e.data);
-      }
-    };
-    ws.onerror = () => setStatus('error');
+    fetch(`/api/sensors/${plantId}`)
+      .then(res => {
+        if (!res.ok) throw new Error();
+        return res.json();
+      })
+      .then(json => setData(json))
+      .catch(() => setError(true));
+  }, [plantId]);
 
-    return () => ws.close();
-  }, []);
+  // 화분 미선택
+  if (plantId < 0) {
+    return <div style={{ color: '#666' }}>🌱 화분을 선택하세요.</div>;
+  }
+  // 로딩 중
+  if (!data && !error) {
+    return <div>🔄 화분 {plantId + 1} 센서 데이터 로딩 중…</div>;
+  }
 
-  if (status === 'connecting') {
-    return <div>센서 연결 중…</div>;
-  }
-  if (status === 'error') {
-    return <div>센서 연결 실패</div>;
-  }
-  if (!data) {
-    return <div>데이터 대기 중…</div>;
-  }
+  // 에러 시 0으로 대체
+  const {
+    temperature   = 0,
+    humidity      = 0,
+    light         = 0,
+    soilMoisture  = 0
+  } = error ? {} : data;
 
   return (
-    <div className="sensor-card">
-      <div>🌡 온도: {data.temp}℃</div>
-      <div>💧 습도: {data.hum}%</div>
-      <div>💡 조도: {data.lux} lx</div>
+    <div
+      style={{
+        margin: 0,
+        padding: 16,
+        background: '#fff',
+        borderRadius: 8,
+        boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
+      }}
+    >
+      <h4 style={{ margin: '0 0 8px' }}>🌱 화분 {plantId + 1} 센서 정보</h4>
+      <p>🌡️ 온도: {temperature}°C</p>
+      <p>💧 습도: {humidity}%</p>
+      <p>💡 조도: {light} lx</p>
+      <p>🪴 토양 습도: {soilMoisture}%</p>
     </div>
   );
 }
