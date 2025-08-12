@@ -1,75 +1,81 @@
-import React, { useState } from 'react';
-import { useNavigate }      from 'react-router-dom';
+// src/components/dashboard/Dashboard.jsx
+import React, { useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-import PlantGallery from './PlantGallery';
-import SensorInfo   from './SensorInfo';
-import StatsChart   from './StatsChart';
-import ControlPanel from './ControlPanel';
+import { AuthContext } from '../../context/AuthContext.jsx';
+import PlantGallery from './PlantGallery.jsx';
+import SensorInfo   from './SensorInfo.jsx';
+import ControlPanel from './ControlPanel.jsx';
+import StatsChart   from './StatsChart.jsx';
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const [plants, setPlants]               = useState([]);
+  const { logout } = useContext(AuthContext);
+
+  const [plants, setPlants] = useState([]);
   const [selectedIndex, setSelectedIndex] = useState(-1);
 
-  const handleSelect = (index, newFiles) => {
-    if (index === -1 && newFiles) {
-      setPlants(prev => [...prev, ...newFiles]);
+  const handleSelect = (index, addedFiles) => {
+    if (index === -1 && addedFiles) {
+      setPlants(prev => [...prev, ...addedFiles]);
     } else {
       setSelectedIndex(index);
     }
   };
 
-  return (
-    <div
-      style={{
-        display: 'flex',
-        justifyContent: 'center',
-        height: '100vh',
-        padding: '10px 20px'
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          flexDirection: 'column',
-          width: '100%',
-          maxWidth: 800,
-          gap: 8
-        }}
-      >
-        {/* AI 챗봇 바로가기 */}
-        <button
-          onClick={() => navigate('/assistant')}
-          style={{
-            padding:    '6px 12px',
-            background: '#1e40af',
-            color:      'white',
-            border:     'none',
-            borderRadius: 4,
-            cursor:     'pointer',
-            alignSelf:  'flex-start'
-          }}
-        >
-          AI 챗봇 바로가기
-        </button>
+  const handleLogout = () => {
+    try { if (typeof logout === 'function') logout(); } catch {}
+    navigate('/login', { replace: true });
+  };
 
-        {/* 1) 화분 갤러리 */}
+  return (
+    <div style={{ display: 'flex', justifyContent: 'center', minHeight: '100vh', padding: '10px 20px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', width: '100%', maxWidth: 900, gap: 10 }}>
+        {/* 상단 바: 좌측 챗봇 / 우측 설정+기기연결+로그아웃 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <button
+            onClick={() => navigate('/assistant')}
+            style={{ padding: '6px 12px', background: '#1e40af', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+          >
+            AI 챗봇 바로가기
+          </button>
+
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => navigate('/settings')}
+              style={{ padding: '6px 12px', background: '#374151', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+            >
+              설정
+            </button>
+            <button
+              onClick={() => navigate('/devices/link')}
+              style={{ padding: '6px 12px', background: '#059669', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+              title="장치 아이디(2-2-4)로 기기 등록"
+            >
+              기기 연결
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{ padding: '6px 12px', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' }}
+            >
+              로그아웃
+            </button>
+          </div>
+        </div>
+
+        {/* 본문 */}
         <PlantGallery
           plants={plants}
           selectedIndex={selectedIndex}
           onSelect={handleSelect}
         />
 
-        {/* 2) 선택된 화분 센서 정보 */}
         <SensorInfo plantId={selectedIndex} />
 
-        {/* 빈 공간 채우기 */}
-        <div style={{ flexGrow: 1 }} />
+        <div style={{ height: 6 }} />
 
-        {/* 3) 제어 모듈 (StatsChart 위로) */}
         <ControlPanel plantId={selectedIndex} />
 
-        {/* 4) 통계 차트: 화분이 하나 이상 있을 때만 */}
         {plants.length > 0 && <StatsChart />}
       </div>
     </div>

@@ -1,14 +1,15 @@
+// src/App.jsx
 import React from 'react';
-import {
-  BrowserRouter,
-  Routes,
-  Route,
-  Navigate
-} from 'react-router-dom';
-import { AuthProvider, AuthContext } from './context/AuthContext';
-import Login         from './components/auth/Login';
-import Dashboard     from './components/dashboard/Dashboard';
-import ChatAssistant from './components/assistant/ChatAssistant';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+
+import { AuthProvider, AuthContext } from './context/AuthContext.jsx';
+
+import Login from './components/auth/Login.jsx';
+import Register from './components/auth/Register.jsx';
+import ChatAssistant from './components/assistant/ChatAssistant.jsx';
+import Dashboard from './components/dashboard/Dashboard.jsx';
+import Settings from './components/settings/Settings.jsx';
+import DeviceLink from './components/devices/DeviceLink.jsx';
 
 function Protected({ children }) {
   const { token } = React.useContext(AuthContext);
@@ -20,13 +21,15 @@ export default function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          {/* 루트: 로그인 페이지로 리다이렉트 */}
+          {/* 최초 진입 → 로그인 */}
           <Route index element={<Navigate to="/login" replace />} />
+          <Route path="/" element={<Navigate to="/login" replace />} />
 
-          {/* 로그인 */}
+          {/* 공개 라우트 */}
           <Route path="/login" element={<Login />} />
+          <Route path="/register" element={<Register />} />
 
-          {/* 대시보드 (인증된 사용자만 접근) */}
+          {/* 보호 라우트 */}
           <Route
             path="/dashboard"
             element={
@@ -35,8 +38,6 @@ export default function App() {
               </Protected>
             }
           />
-
-          {/* AI 챗봇 페이지 (인증된 사용자만 접근) */}
           <Route
             path="/assistant"
             element={
@@ -45,9 +46,25 @@ export default function App() {
               </Protected>
             }
           />
+          <Route
+            path="/settings"
+            element={
+              <Protected>
+                <Settings />
+              </Protected>
+            }
+          />
+          <Route
+            path="/devices/link"
+            element={
+              <Protected>
+                <DeviceLink />
+              </Protected>
+            }
+          />
 
-          {/* 그 외 모든 경로 */}
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          {/* 나머지 → 로그인 */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
