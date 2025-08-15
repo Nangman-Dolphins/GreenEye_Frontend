@@ -1,58 +1,52 @@
+// src/components/dashboard/ControlPanel.jsx
 import React, { useState } from 'react';
 
-export default function ControlPanel({ plantId }) {
-  // plantId: -1 이면 미선택, 0,1,2… 인덱스
-  const actuators = [
-    { id: 'humidifier', label: '가습기' },
-    { id: 'uvLight',     label: 'UV조명' },
-    { id: 'fan',         label: 'FAN' },
-    { id: 'waterPump',   label: '급수기' }
-  ];
-
+export default function ControlPanel({ plantId, deviceCode }) {
+  const actuatorList = ['humidifier','uv','fan','waterpump'];
   const [stateMap, setStateMap] = useState({});
 
-  const onToggle = (actId) => {
-    if (plantId < 0) return; // 선택된 Plant가 없으면 무시
-    const key = `${plantId}-${actId}`; 
-    setStateMap(prev => {
-      const next = !prev[key];
-      console.log(`plant ${plantId} / ${actId} →`, next ? 'ON' : 'OFF');
-      return { ...prev, [key]: next };
+  const handleToggle = (aid) => {
+    if (plantId < 0 && !deviceCode) return;
+
+    const key = `${deviceCode ?? plantId}-${aid}`;
+    const next = !stateMap[key];
+    setStateMap(s => ({ ...s, [key]: next }));
+
+    const url = deviceCode
+      ? `/api/control/device/${encodeURIComponent(deviceCode)}/${aid}`
+      : `/api/control/${plantId}/${aid}`;
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ on: next }),
+    }).catch(() => {
+      setStateMap(s => ({ ...s, [key]: !next }));
+      alert('제어 명령 전송에 실패했습니다.');
     });
   };
 
   return (
-    <div style={{
-      padding: 16,
-      background: '#fff',
-      borderRadius: 8,
-      boxShadow: '0 1px 4px rgba(0,0,0,0.1)'
-    }}>
-      <h3 style={{ margin: '0 0 12px' }}>
-        ⚙️ 제어 모듈&nbsp;
-        {plantId >= 0 ? `(화분 ${plantId + 1} 선택됨)` : '(화분을 선택하세요)'}
-      </h3>
-
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-        {actuators.map(act => {
-          const key = `${plantId}-${act.id}`;
-          const on = !!stateMap[key];
+    <div style={{ padding:16, background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
+      <h4 style={{ marginTop:0 }}>
+        🔧 제어 모듈 — {deviceCode ? `장치 ${deviceCode}` : plantId >= 0 ? `화분 ${plantId + 1}` : '미선택'}
+      </h4>
+      <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+        {actuatorList.map(aid => {
+          const key = `${deviceCode ?? plantId}-${aid}`;
+          const isOn = !!stateMap[key];
           return (
-            <button
-              key={act.id}
-              onClick={() => onToggle(act.id)}
-              disabled={plantId < 0}
+            <button key={aid} onClick={() => handleToggle(aid)}
               style={{
-                padding: '8px 12px',
-                border: '1px solid #ccc',
-                borderRadius: 4,
-                background: on ? '#4caf50' : '#f5f5f5',
-                color:      on ? 'white'    : 'black',
-                cursor: plantId < 0 ? 'not-allowed' : 'pointer',
-                minWidth: 100
-              }}
-            >
-              {act.label} {on ? 'ON' : 'OFF'}
+                padding:'10px 14px',
+                border:'1px solid #e5e7eb',
+                borderRadius:8,
+                background: isOn ? '#16a34a' : '#e5e7eb',
+                color: isOn ? '#fff' : '#111827',
+                cursor:'pointer',
+                minWidth:110
+              }}>
+              {aid.toUpperCase()} {isOn ? 'ON' : 'OFF'}
             </button>
           );
         })}
