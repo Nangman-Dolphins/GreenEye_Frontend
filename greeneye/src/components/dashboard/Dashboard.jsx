@@ -109,7 +109,7 @@ export default function Dashboard() {
       />
 
       <div style={{ marginTop: 16 }}>
-        <SensorInfo plantId={currentDeviceCode} />
+        <SensorInfo plantId={currentDeviceCode} deviceName={current?.name || ''} />
       </div>
 
       <div style={{ marginTop: 16 }}>
