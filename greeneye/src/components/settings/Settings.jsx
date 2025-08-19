@@ -1,58 +1,97 @@
+// src/components/settings/Settings.jsx
 import React, { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 const LS_SETTINGS = 'greeneye_settings';
 const LS_DEVICES  = 'greeneye_devices';
 
+// ▶ 내부 기본값(노출 안 함)
+const SNAPSHOT_PATH_DEFAULT = '/api/camera/snapshot';
+const REFRESH_SEC_DEFAULT   = 3;
+
+/** 운용 모드 프리셋 (분 단위) */
+const MODE_PRESETS = {
+  ultra_low:  { label: '초저전력', ccu: 10, sense: 120, capture: 240, days: 40 },
+  low:        { label: '저전력',   ccu: 10, sense: 60,  capture: 120, days: 38 },
+  normal:     { label: '일반',     ccu: 10, sense: 30,  capture: 60,  days: 34 },
+  high:       { label: '고빈도',   ccu: 10, sense: 15,  capture: 60,  days: 32 },
+  ultra_high: { label: '초고빈도', ccu: 10, sense: 10,  capture: 30,  days: 30 },
+};
+
+const guessMode = (legacyMinutes) => {
+  const m = Number(legacyMinutes);
+  if (!Number.isFinite(m)) return 'normal';
+  if (m >= 90) return 'ultra_low';
+  if (m >= 45) return 'low';
+  if (m >= 22) return 'normal';
+  if (m >= 12) return 'high';
+  return 'ultra_high';
+};
+
 const DEFAULTS = {
-  sensorRefreshMinutes: 5,
-  nightFlashMode: 'always_on', // always_on | always_off | off_night_only
-  cameraPreviewMode: 'snapshot',             // snapshot | mjpeg
-  cameraSnapshotPath: '/api/camera/snapshot',
-  cameraStreamPath:  '/api/camera/stream',
-  snapshotIntervalSec: 3,
-  cameraTargetDevice: '', // 선택된 deviceCode
+  operationMode: 'normal',
+  ccuIntervalMinutes: MODE_PRESETS.normal.ccu,
+  sensingIntervalMinutes: MODE_PRESETS.normal.sense,
+  captureIntervalMinutes: MODE_PRESETS.normal.capture,
+
+  nightFlashMode: 'always_on',
+  cameraTargetDevice: '',
 };
 
 function loadSettings() {
   try {
     const raw = localStorage.getItem(LS_SETTINGS);
     if (!raw) return { ...DEFAULTS };
-    return { ...DEFAULTS, ...JSON.parse(raw) };
-  } catch { return { ...DEFAULTS }; }
+    const parsed = JSON.parse(raw);
+
+    // 레거시 sensorRefreshMinutes → 모드 추정
+    if (parsed.sensorRefreshMinutes && !parsed.operationMode) {
+      const mode = guessMode(parsed.sensorRefreshMinutes);
+      const p = MODE_PRESETS[mode];
+      return {
+        ...DEFAULTS,
+        ...parsed,
+        operationMode: mode,
+        ccuIntervalMinutes: p.ccu,
+        sensingIntervalMinutes: p.sense,
+        captureIntervalMinutes: p.capture,
+      };
+    }
+    return { ...DEFAULTS, ...parsed };
+  } catch {
+    return { ...DEFAULTS };
+  }
 }
 function saveSettings(data) {
   localStorage.setItem(LS_SETTINGS, JSON.stringify(data));
 }
 
-// URL에 deviceCode 반영: /path/{deviceCode} 또는 /path?deviceCode=...
+// URL에 deviceCode 반영
 function withDevice(url, deviceCode) {
   if (!deviceCode) return url;
   if (url.includes('{deviceCode}')) return url.replace('{deviceCode}', encodeURIComponent(deviceCode));
   const sep = url.includes('?') ? '&' : '?';
   return `${url}${sep}deviceCode=${encodeURIComponent(deviceCode)}`;
 }
+const humanizeMin = (m) => (Number(m) % 60 === 0 ? `${Number(m) / 60}h` : `${Number(m) || 0}m`);
 
 export default function Settings() {
   const navigate = useNavigate();
   const [form, setForm] = useState(DEFAULTS);
   const [saved, setSaved] = useState(false);
 
-  // 등록된 기기 목록 (썸네일 포함)
-  const [devices, setDevices] = useState([]); // [{deviceCode, name, imageUrl}]
+  // 등록된 기기
+  const [devices, setDevices] = useState([]);
   const [loadingDevs, setLoadingDevs] = useState(true);
 
-  // 프리뷰 상태
+  // 프리뷰(ON/OFF만)
   const [previewOn, setPreviewOn] = useState(false);
   const [previewError, setPreviewError] = useState('');
   const [cacheBust, setCacheBust] = useState(Date.now());
   const timerRef = useRef(null);
 
-  useEffect(() => {
-    setForm(loadSettings());
-  }, []);
+  useEffect(() => { setForm(loadSettings()); }, []);
 
-  // 등록된 기기 목록 로드: 서버가 있으면 /api/devices, 실패시 로컬 fallback
   useEffect(() => {
     let cancelled = false;
     async function load() {
@@ -60,10 +99,9 @@ export default function Settings() {
       try {
         const r = await fetch('/api/devices', { method: 'GET' });
         if (!r.ok) throw new Error('no api');
-        const arr = await r.json(); // 확실하지 않음: [{deviceCode,name,imageUrl}] 가정
+        const arr = await r.json();
         if (!cancelled) setDevices(Array.isArray(arr) ? arr : []);
       } catch {
-        // 로컬 fallback
         try {
           const local = JSON.parse(localStorage.getItem(LS_DEVICES) || '[]');
           if (!cancelled) setDevices(Array.isArray(local) ? local : []);
@@ -78,33 +116,27 @@ export default function Settings() {
     return () => { cancelled = true; };
   }, []);
 
-  // 숫자 입력
-  const onChangeNumber = (e) => {
-    const { name, value } = e.target;
-    setForm(s => ({ ...s, [name]: value.replace(/[^\d]/g, '') }));
-  };
-  // 일반 입력
-  const onChange = (e) => {
-    const { name, value } = e.target;
-    setForm(s => ({ ...s, [name]: value }));
+  const onChange = (e) => setForm(s => ({ ...s, [e.target.name]: e.target.value }));
+
+  const applyMode = (modeKey) => {
+    const p = MODE_PRESETS[modeKey] || MODE_PRESETS.normal;
+    setForm(s => ({
+      ...s,
+      operationMode: modeKey,
+      ccuIntervalMinutes: p.ccu,
+      sensingIntervalMinutes: p.sense,
+      captureIntervalMinutes: p.capture,
+    }));
   };
 
   const handleSave = () => {
-    let minutes = parseInt(form.sensorRefreshMinutes, 10);
-    if (Number.isNaN(minutes) || minutes <= 0) minutes = DEFAULTS.sensorRefreshMinutes;
-    if (minutes > 1440) minutes = 1440;
-
-    let sec = parseInt(form.snapshotIntervalSec, 10);
-    if (Number.isNaN(sec) || sec <= 0) sec = DEFAULTS.snapshotIntervalSec;
-    if (sec > 60) sec = 60;
-
+    const p = MODE_PRESETS[form.operationMode] || MODE_PRESETS.normal;
     const data = {
-      sensorRefreshMinutes: minutes,
-      nightFlashMode: form.nightFlashMode || DEFAULTS.nightFlashMode,
-      cameraPreviewMode: form.cameraPreviewMode || DEFAULTS.cameraPreviewMode,
-      cameraSnapshotPath: (form.cameraSnapshotPath || DEFAULTS.cameraSnapshotPath).trim(),
-      cameraStreamPath:  (form.cameraStreamPath  || DEFAULTS.cameraStreamPath).trim(),
-      snapshotIntervalSec: sec,
+      operationMode: form.operationMode,
+      ccuIntervalMinutes: p.ccu,
+      sensingIntervalMinutes: p.sense,
+      captureIntervalMinutes: p.capture,
+      nightFlashMode: form.nightFlashMode || 'always_on',
       cameraTargetDevice: form.cameraTargetDevice || '',
     };
     saveSettings(data);
@@ -113,44 +145,90 @@ export default function Settings() {
     setTimeout(() => setSaved(false), 1500);
   };
 
-  // 프리뷰 제어
   const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
   const startPreview = () => {
     setPreviewError('');
-    if (!form.cameraTargetDevice) {
-      setPreviewError('카메라 대상 기기를 먼저 선택하세요.');
-      return;
-    }
+    if (!form.cameraTargetDevice) { setPreviewError('카메라 대상 기기를 먼저 선택하세요.'); return; }
     setPreviewOn(true);
-    if (form.cameraPreviewMode === 'snapshot') {
-      stopTimer();
-      const sec = Math.max(1, Number(form.snapshotIntervalSec) || DEFAULTS.snapshotIntervalSec);
-      timerRef.current = setInterval(() => setCacheBust(Date.now()), sec * 1000);
-    } else {
-      stopTimer();
-    }
+    stopTimer();
+    timerRef.current = setInterval(() => setCacheBust(Date.now()), REFRESH_SEC_DEFAULT * 1000);
   };
   const stopPreview = () => { setPreviewOn(false); setPreviewError(''); stopTimer(); };
 
-  // 스타일
   const card = { background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)', padding:16, marginBottom:16, boxSizing:'border-box' };
   const section = (title) => <h3 style={{ margin:'0 0 12px' }}>{title}</h3>;
+
+  const ModeCard = ({ k }) => {
+    const p = MODE_PRESETS[k];
+    const selected = form.operationMode === k;
+    return (
+      <button
+        type="button"
+        onClick={() => applyMode(k)}
+        title={`${p.label} / CCU ${humanizeMin(p.ccu)}, 센싱 ${humanizeMin(p.sense)}, 촬영 ${humanizeMin(p.capture)} · ${p.days}일`}
+        style={{
+          width: '100%',
+          textAlign: 'center',
+          padding: '12px 12px',
+          borderRadius: 10,
+          border: selected ? '2px solid #1e40af' : '1px solid #e5e7eb',
+          background: '#fff',
+          cursor: 'pointer',
+          fontWeight: 800,
+          whiteSpace: 'nowrap',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis'
+        }}
+      >
+        {p.label}
+      </button>
+    );
+  };
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f3f4f6' }}>
       <div style={{ width: 820, padding:24, background:'#fff', borderRadius:10, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
         <h2 style={{ marginTop:0 }}>설정</h2>
 
-        {/* 센서 & 플래시 */}
+        {/* 운용 모드 & 플래시 */}
         <div style={card}>
-          {section('센서 & 플래시')}
+          {section('운용 모드 & 플래시')}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(5, 1fr)',  // 5개 한 줄
+              gap: 16,
+              marginBottom: 16
+            }}
+          >
+            {Object.keys(MODE_PRESETS).map(k => <ModeCard key={k} k={k} />)}
+          </div>
+
+          {/* 선택된 모드 주기값(읽기 전용 표기) */}
           <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
             <div>
-              <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>센서 갱신 간격(분)</label>
-              <input name="sensorRefreshMinutes" type="text" inputMode="numeric"
-                value={form.sensorRefreshMinutes} onChange={onChangeNumber}
-                style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4 }} />
-              <div style={{ color:'#6b7280', fontSize:12, marginTop:6 }}>1~1440분 권장</div>
+              <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>CCU 연동</label>
+              <input
+                value={humanizeMin(MODE_PRESETS[form.operationMode].ccu)}
+                readOnly
+                style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>센싱 주기</label>
+              <input
+                value={humanizeMin(MODE_PRESETS[form.operationMode].sense)}
+                readOnly
+                style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}
+              />
+            </div>
+            <div>
+              <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>촬영 주기</label>
+              <input
+                value={humanizeMin(MODE_PRESETS[form.operationMode].capture)}
+                readOnly
+                style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}
+              />
             </div>
             <div>
               <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>밤 플래시</label>
@@ -164,7 +242,7 @@ export default function Settings() {
           </div>
         </div>
 
-        {/* 카메라 대상 선택 (등록된 사진) */}
+        {/* 카메라 대상 선택 */}
         <div style={card}>
           {section('카메라 대상(등록된 사진에서 선택)')}
           {loadingDevs ? (
@@ -176,11 +254,10 @@ export default function Settings() {
               {devices.map((d, i) => {
                 const selected = form.cameraTargetDevice === d.deviceCode;
                 return (
-                  <button key={d.deviceCode || i} onClick={() => setForm(s => ({ ...s, cameraTargetDevice: d.deviceCode }))}
-                    style={{
-                      padding:8, borderRadius:8, border: selected ? '2px solid #1e40af' : '1px solid #e5e7eb',
-                      background:'#fff', textAlign:'left', cursor:'pointer'
-                    }}>
+                  <button key={d.deviceCode || i} onClick={() => setForm(s => ({ ...s, cameraTargetDevice: d.deviceCode }))} style={{
+                    padding:8, borderRadius:8, border: selected ? '2px solid #1e40af' : '1px solid #e5e7eb',
+                    background:'#fff', textAlign:'left', cursor:'pointer'
+                  }}>
                     <div style={{
                       width:'100%', aspectRatio:'16 / 9', background:'#000', borderRadius:6, overflow:'hidden',
                       marginBottom:8, display:'flex', alignItems:'center', justifyContent:'center'
@@ -199,86 +276,59 @@ export default function Settings() {
           )}
         </div>
 
-        {/* 카메라 프리뷰 */}
+        {/* 카메라 프리뷰 (ON/OFF만) */}
         <div style={card}>
           {section('카메라 프리뷰')}
-          <div style={{ display:'flex', gap:16, flexWrap:'wrap', marginBottom:12 }}>
-            <div>
-              <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>프리뷰 모드</label>
-              <select name="cameraPreviewMode" value={form.cameraPreviewMode} onChange={onChange}
-                style={{ width:180, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
-                <option value="snapshot">스냅샷(주기 갱신)</option>
-                <option value="mjpeg">스트림(MJPEG)</option>
-              </select>
-            </div>
-            {form.cameraPreviewMode === 'snapshot' ? (
-              <>
-                <div>
-                  <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>스냅샷 경로</label>
-                  <input name="cameraSnapshotPath" type="text" value={form.cameraSnapshotPath} onChange={onChange}
-                    placeholder="/api/camera/snapshot 또는 /api/camera/{deviceCode}/snapshot"
-                    style={{ width:320, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4 }} />
-                  <div style={{ color:'#6b7280', fontSize:12, marginTop:6 }}>
-                    경로에 <code>{'{deviceCode}'}</code>를 넣으면 자동 치환. 없으면 <code>?deviceCode=</code>가 붙습니다.
-                  </div>
-                </div>
-                <div>
-                  <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>갱신 주기(초)</label>
-                  <input name="snapshotIntervalSec" type="text" inputMode="numeric" value={form.snapshotIntervalSec} onChange={onChange}
-                    style={{ width:120, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4 }} />
-                </div>
-              </>
-            ) : (
-              <div>
-                <label style={{ fontWeight:600, display:'block', marginBottom:6 }}>스트림 경로(MJPEG)</label>
-                <input name="cameraStreamPath" type="text" value={form.cameraStreamPath} onChange={onChange}
-                  placeholder="/api/camera/stream 또는 /api/camera/{deviceCode}/stream"
-                  style={{ width:320, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4 }} />
-              </div>
-            )}
-          </div>
-
-          <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-            <button onClick={handleSave} type="button"
-              style={{ padding:'8px 12px', background:'#1e40af', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
-              설정 저장
+          <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center' }}>
+            <button
+              onClick={previewOn ? stopPreview : startPreview}
+              type="button"
+              disabled={!form.cameraTargetDevice}
+              style={{
+                padding:'8px 12px',
+                background: previewOn ? '#dc2626' : '#059669',
+                color:'#fff',
+                border:'none',
+                borderRadius:4,
+                cursor: form.cameraTargetDevice ? 'pointer' : 'not-allowed'
+              }}
+            >
+              {previewOn ? '프리뷰 끄기' : '프리뷰 켜기'}
             </button>
-            {!previewOn ? (
-              <button onClick={startPreview} type="button"
-                style={{ padding:'8px 12px', background:'#059669', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
-                프리뷰 시작
-              </button>
-            ) : (
-              <button onClick={stopPreview} type="button"
-                style={{ padding:'8px 12px', background:'#dc2626', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
-                프리뷰 정지
-              </button>
+            {!form.cameraTargetDevice && (
+              <span style={{ color:'#6b7280' }}>카메라 대상 기기를 먼저 선택하세요.</span>
             )}
             <div style={{ flex:1 }} />
             <button onClick={() => navigate(-1)} type="button"
               style={{ padding:'8px 12px', background:'#374151', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
               뒤로
             </button>
+            <button onClick={handleSave} type="button"
+              style={{ padding:'8px 12px', background:'#1e40af', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
+              설정 저장
+            </button>
           </div>
 
-          <div style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden', background:'#000',
-                        aspectRatio:'16 / 9', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{
+            border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden', background:'#000',
+            aspectRatio:'16 / 9', display:'flex', alignItems:'center', justifyContent:'center'
+          }}>
             {!previewOn ? (
               <div style={{ color:'#9ca3af' }}>프리뷰가 꺼져 있습니다.</div>
-            ) : form.cameraPreviewMode === 'snapshot' ? (
-              <img
-                src={withDevice(form.cameraSnapshotPath, form.cameraTargetDevice) + `&t=${cacheBust}`}
-                alt="snapshot"
-                onError={() => setPreviewError('스냅샷을 불러오지 못했습니다. 경로/권한/CORS를 확인하세요.')}
-                style={{ width:'100%', height:'100%', objectFit:'contain' }}
-              />
             ) : (
-              <img
-                src={withDevice(form.cameraStreamPath, form.cameraTargetDevice)}
-                alt="mjpeg-stream"
-                onError={() => setPreviewError('스트림을 불러오지 못했습니다. 경로/권한/CORS를 확인하세요.')}
-                style={{ width:'100%', height:'100%', objectFit:'contain' }}
-              />
+              (() => {
+                const base = withDevice(SNAPSHOT_PATH_DEFAULT, form.cameraTargetDevice);
+                const sep  = base.includes('?') ? '&' : '?';
+                const src  = `${base}${sep}t=${cacheBust}`;
+                return (
+                  <img
+                    src={src}
+                    alt="snapshot"
+                    onError={() => setPreviewError('스냅샷을 불러오지 못했습니다. 경로/권한/CORS를 확인하세요.')}
+                    style={{ width:'100%', height:'100%', objectFit:'contain' }}
+                  />
+                );
+              })()
             )}
           </div>
 

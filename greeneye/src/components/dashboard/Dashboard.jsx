@@ -1,3 +1,4 @@
+// src/components/dashboard/Dashboard.jsx
 import React, { useEffect, useState, useContext } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 
@@ -8,10 +9,18 @@ import { AuthContext } from '../../context/AuthContext';
 
 const LS_DEVICES = 'greeneye_devices';
 
-// deviceCode 기준 중복 제거
+// 공백만 무시(대/소문자 구분)
+const codeTrim = (v) => String(v ?? '').trim();
+const eqCode = (a, b) => codeTrim(a) === codeTrim(b);
+
+// 동일 문자열만 병합(대/소문자 다르면 별개)
 const dedupeByCode = (list = []) => {
   const map = new Map();
-  for (const d of list) if (d?.deviceCode) map.set(d.deviceCode, { ...map.get(d.deviceCode), ...d });
+  for (const d of list) {
+    const key = codeTrim(d?.deviceCode);
+    if (!key) continue;
+    map.set(key, { ...map.get(key), ...d, deviceCode: d?.deviceCode });
+  }
   return Array.from(map.values());
 };
 
@@ -20,9 +29,7 @@ const loadDevices = () => {
     const raw = localStorage.getItem(LS_DEVICES);
     if (!raw) return [];
     return dedupeByCode(JSON.parse(raw));
-  } catch {
-    return [];
-  }
+  } catch { return []; }
 };
 
 const saveDevices = (list) => {
@@ -37,18 +44,18 @@ export default function Dashboard() {
   const [devices, setDevices] = useState(() => loadDevices());
   const [selectedIndex, setSelectedIndex] = useState(0);
 
-  // DeviceLink에서 돌아온 경우: 로컬만 새로 읽고 state 제거
+  // DeviceLink에서 복귀 시 최신 로컬 반영 + 선택 유지
   useEffect(() => {
     if (location.state?.addedDevice) {
       const fresh = loadDevices();
       setDevices(fresh);
-      const idx = fresh.findIndex(d => d.deviceCode === location.state.addedDevice.deviceCode);
+      const idx = fresh.findIndex(d => eqCode(d.deviceCode, location.state.addedDevice.deviceCode));
       if (idx >= 0) setSelectedIndex(idx);
       navigate(location.pathname, { replace: true, state: null });
     }
   }, [location, navigate]);
 
-  // 다른 탭과 동기화(선택)
+  // 다른 탭 동기화
   useEffect(() => {
     const onStorage = (e) => { if (e.key === LS_DEVICES) setDevices(loadDevices()); };
     window.addEventListener('storage', onStorage);
@@ -58,23 +65,19 @@ export default function Dashboard() {
   const current = devices[selectedIndex] || null;
   const currentDeviceCode = current?.deviceCode || '';
 
-  // ✅ 선택 기기 삭제 (실제 삭제 로직은 대시보드에서 수행)
+  // 선택 삭제
   const handleDeleteSelected = () => {
-    if (!currentDeviceCode) {
-      alert('삭제할 기기를 먼저 선택하세요.');
-      return;
-    }
+    if (!currentDeviceCode) return alert('삭제할 기기를 먼저 선택하세요.');
     const label = current?.name || currentDeviceCode;
     if (!window.confirm(`선택한 기기(${label})를 삭제할까요?\n삭제 후 되돌릴 수 없습니다.`)) return;
 
-    const next = devices.filter(d => d.deviceCode !== currentDeviceCode);
+    const next = devices.filter(d => !eqCode(d.deviceCode, currentDeviceCode));
     saveDevices(next);
     setDevices(next);
     setSelectedIndex(prev => (next.length === 0 ? 0 : Math.min(prev, next.length - 1)));
     alert('삭제 완료!');
   };
 
-  // 상단 툴바 버튼 스타일
   const btn = (bg, color = '#fff') => ({
     padding: '8px 12px',
     border: 'none',
@@ -100,20 +103,22 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* 갤러리(우측 상단에 삭제 버튼 표시) */}
+      {/* 갤러리 (우측 상단에 삭제 버튼 표시) */}
       <PlantGallery
         devices={devices}
         selectedIndex={selectedIndex}
         onSelect={setSelectedIndex}
-        onDeleteSelected={handleDeleteSelected}   // ← 여기!
+        onDeleteSelected={handleDeleteSelected}
       />
 
+      {/* 센서 카드 */}
       <div style={{ marginTop: 16 }}>
-        <SensorInfo plantId={currentDeviceCode} deviceName={current?.name || ''} />
+        <SensorInfo deviceCode={currentDeviceCode} deviceName={current?.name || ''} />
       </div>
 
+      {/* 제어 패널 */}
       <div style={{ marginTop: 16 }}>
-        <ControlPanel actuatorId={currentDeviceCode} />
+        <ControlPanel deviceCode={currentDeviceCode} />
       </div>
     </div>
   );

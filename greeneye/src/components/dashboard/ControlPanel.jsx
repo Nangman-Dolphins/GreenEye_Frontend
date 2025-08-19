@@ -1,4 +1,4 @@
-// src/components/dashboard/ControlPanel.jsx
+//ControlPanel.jsx
 import React, { useState } from 'react';
 
 export default function ControlPanel({ plantId, deviceCode }) {
