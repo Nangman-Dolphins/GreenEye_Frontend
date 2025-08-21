@@ -4,22 +4,20 @@ export const AuthContext = createContext({
   token: null,
   login: (_arg) => false,
   logout: () => {},
-  // 토큰 없으면 그냥 기본 fetch
-  authFetch: (input, init) => fetch(input, init),
+  authFetch: async (_url, _init) => new Response(null, { status: 500 }),
 });
 
 const STORAGE_KEY = 'auth_token';
+const API_BASE = import.meta.env.VITE_API_BASE || ''; // 프록시면 '' 유지
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
 
-  // 앱 시작 시 토큰 복원
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) setToken(saved);
   }, []);
 
-  // 로그인: 문자열 또는 { token }
   const login = (arg) => {
     const t = typeof arg === 'string' ? arg : arg?.token;
     if (!t) return false;
@@ -28,17 +26,19 @@ export function AuthProvider({ children }) {
     return true;
   };
 
-  // 로그아웃
   const logout = () => {
     setToken(null);
     localStorage.removeItem(STORAGE_KEY);
   };
 
-  // ✅ 인증 fetch: Authorization 헤더 자동 첨부
-  const authFetch = async (input, init = {}) => {
+  const authFetch = async (path, init = {}) => {
+    const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
     const headers = new Headers(init.headers || {});
     if (token) headers.set('Authorization', `Bearer ${token}`);
-    return fetch(input, { ...init, headers });
+    if (!headers.has('Content-Type') && init.body && !(init.body instanceof FormData)) {
+      headers.set('Content-Type', 'application/json');
+    }
+    return fetch(url, { ...init, headers, credentials: 'include' });
   };
 
   const value = useMemo(() => ({ token, login, logout, authFetch }), [token]);

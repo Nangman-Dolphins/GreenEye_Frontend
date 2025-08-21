@@ -1,8 +1,12 @@
-//Login.jsx
+// src/components/auth/Login.jsx
 import React, { useContext, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext.jsx';
 import logo from '../../assets/greeneye_logo.png';
+
+const OFFLINE_EMAIL = 'greeneye@naver.com';
+const OFFLINE_PASS  = '1111';
+const OFFLINE_TOKEN = 'OFFLINE_DEV_TOKEN';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -12,14 +16,32 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [err, setErr]           = useState('');
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // 임시 로그인 (greeneye / 1111)
-    if (email === 'greeneye' && password === '1111') {
-      if (login('TEMP_TOKEN')) navigate('/dashboard', { replace: true });
-      else setErr('로그인 토큰 저장 실패');
-    } else {
-      setErr('이메일 또는 비밀번호가 올바르지 않습니다.');
+    setErr('');
+
+    // ✅ 오프라인(백엔드 미연결)용 고정 계정 허용
+    if (email.trim().toLowerCase() === OFFLINE_EMAIL && password === OFFLINE_PASS) {
+      if (login(OFFLINE_TOKEN)) navigate('/dashboard', { replace: true, state: { offline: true } });
+      else setErr('토큰 저장 실패(오프라인)');
+      return;
+    }
+
+    // 🌐 온라인 로그인 (백엔드 연결 시 사용)
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type':'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json().catch(()=> ({}));
+      if (!res.ok) throw new Error(data?.error || `로그인 실패 (status ${res.status})`);
+      if (!data?.token) throw new Error('토큰이 없습니다.');
+
+      if (login(data.token)) navigate('/dashboard', { replace: true });
+      else setErr('토큰 저장 실패');
+    } catch (e2) {
+      setErr(e2.message || '로그인 중 오류가 발생했습니다.');
     }
   };
 
@@ -46,6 +68,9 @@ export default function Login() {
           style={{ width: 200, height: 'auto', margin: '0 auto 16px', display: 'block' }}
         />
         <h2 style={{ margin: '0 0 24px' }}>로그인</h2>
+
+        {/* 힌트가 필요하면 아래 한 줄 주석 해제해서 개발 모드 안내 가능 */}
+        {/* <div style={{ fontSize:12, color:'#6b7280', marginBottom:8 }}>오프라인 테스트 계정: {OFFLINE_EMAIL} / {OFFLINE_PASS}</div> */}
 
         {err && <div style={{ color: 'red', marginBottom: 12 }}>{err}</div>}
 
@@ -79,7 +104,6 @@ export default function Login() {
           로그인
         </button>
 
-        {/* 회원가입 버튼 (오른쪽 끝이 아닌 로그인 폼 하단—로그인 화면이므로 자연스러워요) */}
         <button
           type="button"
           onClick={() => navigate('/register')}
