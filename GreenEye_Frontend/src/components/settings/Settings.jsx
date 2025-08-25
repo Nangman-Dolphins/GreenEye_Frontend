@@ -1,0 +1,240 @@
+import React, { useEffect, useRef, useState, useContext } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AuthContext } from '../../context/AuthContext';
+
+const LS_SETTINGS = 'greeneye_settings';
+const SNAPSHOT_PATH_DEFAULT = '/api/camera/snapshot';
+const REFRESH_SEC_DEFAULT   = 3;
+
+const MODE_PRESETS = {
+  ultra_low:  { label: '초저전력', ccu: 10, sense: 120, capture: 240, days: 40 },
+  low:        { label: '저전력',   ccu: 10, sense: 60,  capture: 120, days: 38 },
+  normal:     { label: '일반',     ccu: 10, sense: 30,  capture: 60,  days: 34 },
+  high:       { label: '고빈도',   ccu: 10, sense: 15,  capture: 60,  days: 32 },
+  ultra_high: { label: '초고빈도', ccu: 10, sense: 1,   capture: 30,  days: 30 }, // 요구 반영
+};
+
+/* 계정별 키/리더 */
+const hashStr = (str) => { let h=2166136261>>>0; for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,16777619);} return (h>>>0).toString(36); };
+const userKeyFromToken = (t) => (t ? hashStr(String(t)) : 'guest');
+const thumbsKeyForUser  = (t) => `greeneye_thumbs:${userKeyFromToken(t)}`;
+const metaKeyForUser    = (t) => `greeneye_meta:${userKeyFromToken(t)}`;
+const clientDevsKeyForUser = (t) => `greeneye_client_devices:${userKeyFromToken(t)}`;
+const readThumbs = (t) => { try { return JSON.parse(localStorage.getItem(thumbsKeyForUser(t)) || '{}'); } catch { return {}; } };
+const readMeta   = (t) => { try { return JSON.parse(localStorage.getItem(metaKeyForUser(t))   || '{}'); } catch { return {}; } };
+const readClientDevs = (t) => { try { return JSON.parse(localStorage.getItem(clientDevsKeyForUser(t)) || '[]'); } catch { return []; } };
+
+const DEFAULTS = {
+  operationMode: 'normal',
+  ccuIntervalMinutes: MODE_PRESETS.normal.ccu,
+  sensingIntervalMinutes: MODE_PRESETS.normal.sense,
+  captureIntervalMinutes: MODE_PRESETS.normal.capture,
+  nightFlashMode: 'always_on',
+  cameraTargetDevice: '',
+};
+
+const normDevice = (x = {}) => {
+  const code = String(x.deviceCode ?? x.device_id ?? x.device_code ?? x.mac ?? '').trim();
+  return {
+    deviceCode: code,
+    name: x.name ?? x.friendly_name ?? code,
+    imageUrl: x.imageUrl ?? x.thumbnail_url ?? x.photoUrl ?? x.image_filename ?? '',
+    room: x.room ?? '',
+    species: x.species ?? '',
+  };
+};
+
+function loadSettings() { try { const raw=localStorage.getItem(LS_SETTINGS); return raw?JSON.parse(raw):{...DEFAULTS}; } catch { return { ...DEFAULTS }; } }
+function saveSettings(data) { localStorage.setItem(LS_SETTINGS, JSON.stringify(data)); window.dispatchEvent(new CustomEvent('greeneye:settings-updated')); }
+const humanizeMin = (m) => (Number(m) % 60 === 0 ? `${Number(m) / 60}h` : `${Number(m) || 0}m`);
+
+export default function Settings() {
+  const navigate = useNavigate();
+  const { authFetch, token } = useContext(AuthContext) || {};
+  const [form, setForm] = useState(loadSettings());
+  const [saved, setSaved] = useState(false);
+
+  const [devices, setDevices] = useState([]);
+  const [loadingDevs, setLoadingDevs] = useState(true);
+
+  const [previewOn, setPreviewOn] = useState(false);
+  const [previewError, setPreviewError] = useState('');
+  const [cacheBust, setCacheBust] = useState(Date.now());
+  const timerRef = useRef(null);
+
+  /* 서버 목록 + 로컬 임시 목록 유니온 */
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      setLoadingDevs(true);
+      try {
+        const r = await authFetch('/api/devices', { cache: 'no-store' });
+        const arr = r.ok ? (await r.json()) : [];
+        const api = Array.isArray(arr) ? arr.map(normDevice) : [];
+
+        const locals = readClientDevs(token).map(normDevice);
+        const tmap = readThumbs(token);
+        const mmap = readMeta(token);
+
+        const map = new Map();
+        [...locals, ...api].forEach(d => {
+          const prev = map.get(d.deviceCode) || {};
+          const merged = {
+            ...prev,
+            ...d,
+            imageUrl: tmap[d.deviceCode] ?? d.imageUrl ?? prev.imageUrl,
+            species: (mmap[d.deviceCode]?.species ?? d.species ?? prev.species),
+            room:    (mmap[d.deviceCode]?.room    ?? d.room    ?? prev.room),
+          };
+          map.set(d.deviceCode, merged);
+        });
+
+        if (!cancelled) setDevices([...map.values()]);
+      } catch {
+        if (!cancelled) setDevices(readClientDevs(token).map(normDevice));
+      } finally {
+        if (!cancelled) setLoadingDevs(false);
+      }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [authFetch, token]);
+
+  /* 스토리지/커스텀 이벤트 즉시 반영 */
+  useEffect(() => {
+    const onStorage = (e) => {
+      const keys = [thumbsKeyForUser(token), metaKeyForUser(token), clientDevsKeyForUser(token)];
+      if (keys.includes(e.key)) {
+        // 그냥 다시 로드
+        (async () => {
+          const r = await authFetch('/api/devices', { cache: 'no-store' }).catch(()=>null);
+          const arr = r && r.ok ? (await r.json()) : [];
+          const api = Array.isArray(arr) ? arr.map(normDevice) : [];
+          const locals = readClientDevs(token).map(normDevice);
+          const tmap = readThumbs(token);
+          const mmap = readMeta(token);
+          const map = new Map();
+          [...locals, ...api].forEach(d => {
+            const prev = map.get(d.deviceCode) || {};
+            const merged = {
+              ...prev,
+              ...d,
+              imageUrl: tmap[d.deviceCode] ?? d.imageUrl ?? prev.imageUrl,
+              species: (mmap[d.deviceCode]?.species ?? d.species ?? prev.species),
+              room:    (mmap[d.deviceCode]?.room    ?? d.room    ?? prev.room),
+            };
+            map.set(d.deviceCode, merged);
+          });
+          setDevices([...map.values()]);
+        })();
+      }
+    };
+    const onCustom = () => onStorage({ key: clientDevsKeyForUser(token) });
+    window.addEventListener('storage', onStorage);
+    window.addEventListener('greeneye:client-devices-updated', onCustom);
+    return () => {
+      window.removeEventListener('storage', onStorage);
+      window.removeEventListener('greeneye:client-devices-updated', onCustom);
+    };
+  }, [authFetch, token]);
+
+  const onChange = (e) => setForm(s => ({ ...s, [e.target.name]: e.target.value }));
+  const applyMode = (k) => { const p = MODE_PRESETS[k] || MODE_PRESETS.normal; setForm(s => ({ ...s, operationMode:k, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture })); };
+  const handleSave = () => { const p = MODE_PRESETS[form.operationMode] || MODE_PRESETS.normal;
+    const data = { operationMode: form.operationMode, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture, nightFlashMode: form.nightFlashMode || 'always_on', cameraTargetDevice: form.cameraTargetDevice || '' };
+    saveSettings(data); setForm(data); setSaved(true); setTimeout(()=>setSaved(false), 1200); };
+
+  const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
+  const startPreview = () => { setPreviewError(''); if (!form.cameraTargetDevice) return setPreviewError('카메라 대상 기기를 먼저 선택하세요.');
+    setPreviewOn(true); stopTimer(); timerRef.current = setInterval(()=>setCacheBust(Date.now()), REFRESH_SEC_DEFAULT*1000); };
+  const stopPreview = () => { setPreviewOn(false); setPreviewError(''); stopTimer(); };
+
+  const card = { background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)', padding:16, marginBottom:16 };
+  const section = (title) => <h3 style={{ margin:'0 0 12px' }}>{title}</h3>;
+
+  const humanize = (m) => humanizeMin(m);
+  const ModeCard = ({ k }) => { const p = MODE_PRESETS[k]; const selected = form.operationMode === k;
+    return (<button type="button" onClick={()=>applyMode(k)} title={`${p.label} / CCU ${humanize(p.ccu)}, 센싱 ${humanize(p.sense)}, 촬영 ${humanize(p.capture)} · ${p.days}일`}
+      style={{ width:'100%', textAlign:'center', padding:'12px', borderRadius:10, border:selected?'2px solid #1e40af':'1px solid #e5e7eb', background:'#fff', cursor:'pointer', fontWeight:800 }}>{p.label}</button>);
+  };
+
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f3f4f6' }}>
+      <div style={{ width: 820, padding:24, background:'#fff', borderRadius:10, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
+        <h2 style={{ marginTop:0 }}>설정</h2>
+
+        <div style={card}>
+          {section('운용 모드 & 플래시')}
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(5, 1fr)', gap:16, marginBottom:16 }}>
+            {Object.keys(MODE_PRESETS).map(k => <ModeCard key={k} k={k} />)}
+          </div>
+          <div style={{ display:'flex', gap:16, flexWrap:'wrap' }}>
+            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>CCU 연동</label>
+              <input value={humanize(MODE_PRESETS[form.operationMode].ccu)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
+            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>센싱 주기</label>
+              <input value={humanize(MODE_PRESETS[form.operationMode].sense)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
+            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>촬영 주기</label>
+              <input value={humanize(MODE_PRESETS[form.operationMode].capture)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
+            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>밤 플래시</label>
+              <select name="nightFlashMode" value={form.nightFlashMode} onChange={onChange} style={{ width:220, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
+                <option value="always_on">항시 ON</option><option value="always_off">항시 OFF</option><option value="off_night_only">밤에만 OFF</option>
+              </select></div>
+          </div>
+        </div>
+
+        <div style={card}>
+          {section('카메라 대상(등록된 사진에서 선택)')}
+          {loadingDevs ? (<div style={{ color:'#6b7280' }}>등록된 기기를 불러오는 중…</div>) :
+           devices.length === 0 ? (<div style={{ color:'#6b7280' }}>등록된 기기가 없습니다. 먼저 “기기 연결”에서 등록하세요.</div>) :
+           (<div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(160px, 1fr))', gap:12 }}>
+              {devices.map((d, i) => {
+                const selected = form.cameraTargetDevice === d.deviceCode;
+                return (
+                  <button key={d.deviceCode || i} onClick={() => setForm(s => ({ ...s, cameraTargetDevice: d.deviceCode }))}
+                          style={{ padding:8, borderRadius:8, border: selected ? '2px solid #1e40af' : '1px solid #e5e7eb', background:'#fff', textAlign:'left', cursor:'pointer' }}>
+                    <div style={{ width:'100%', aspectRatio:'16/9', background:'#000', borderRadius:6, overflow:'hidden', marginBottom:8, display:'flex', alignItems:'center', justifyContent:'center' }}>
+                      {d.imageUrl ? <img src={d.imageUrl} alt={d.name || d.deviceCode} style={{ width:'100%', height:'100%', objectFit:'cover' }}/>
+                                 : <span style={{ color:'#9ca3af' }}>이미지 없음</span>}
+                    </div>
+                    <div style={{ fontWeight:700, fontSize:14, marginBottom:2 }}>{d.name || '이름 없음'}</div>
+                    <div style={{ fontFamily:'monospace', fontSize:12, color:'#374151' }}>{d.deviceCode}</div>
+                    {d.species && <div style={{ marginTop:4, fontSize:12, color:'#6b7280' }}>{d.species}</div>}
+                    {selected && <div style={{ marginTop:6, color:'#1e40af', fontSize:12 }}>✅ 선택됨</div>}
+                  </button>
+                );
+              })}
+            </div>)}
+        </div>
+
+        <div style={card}>
+          {section('카메라 프리뷰')}
+          <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center' }}>
+            <button onClick={previewOn ? (()=>{setPreviewOn(false);}) : (()=>{ if(!form.cameraTargetDevice) return; setPreviewOn(true); if (timerRef.current) clearInterval(timerRef.current); timerRef.current=setInterval(()=>setCacheBust(Date.now()), REFRESH_SEC_DEFAULT*1000);})}
+                    type="button"
+                    disabled={!form.cameraTargetDevice}
+                    style={{ padding:'8px 12px', background: previewOn ? '#dc2626' : '#059669', color:'#fff', border:'none', borderRadius:4,
+                             cursor: form.cameraTargetDevice ? 'pointer' : 'not-allowed' }}>
+              {previewOn ? '프리뷰 끄기' : '프리뷰 켜기'}
+            </button>
+            {!form.cameraTargetDevice && <span style={{ color:'#6b7280' }}>카메라 대상 기기를 먼저 선택하세요.</span>}
+            <div style={{ flex:1 }} />
+            <button onClick={()=>navigate(-1)} type="button" style={{ padding:'8px 12px', background:'#374151', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>뒤로</button>
+            <button onClick={()=>{ const p=MODE_PRESETS[form.operationMode]||MODE_PRESETS.normal; const data={operationMode:form.operationMode, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture, nightFlashMode:form.nightFlashMode||'always_on', cameraTargetDevice:form.cameraTargetDevice||''}; saveSettings(data); setForm(data); setSaved(true); setTimeout(()=>setSaved(false),1200); }}
+                    type="button" style={{ padding:'8px 12px', background:'#1e40af', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
+              설정 저장
+            </button>
+          </div>
+          <div style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden', background:'#000', aspectRatio:'16/9', display:'flex', alignItems:'center', justifyContent:'center' }}>
+            {!previewOn ? <div style={{ color:'#9ca3af' }}>프리뷰가 꺼져 있습니다.</div> :
+              (() => { const src = `${SNAPSHOT_PATH_DEFAULT}?deviceCode=${encodeURIComponent(form.cameraTargetDevice)}&t=${cacheBust}`; return (
+                <img src={src} alt="snapshot" onError={()=>setPreviewError('스냅샷을 불러오지 못했습니다.')} style={{ width:'100%', height:'100%', objectFit:'contain' }} />
+              ); })()}
+          </div>
+          {previewError && <div style={{ color:'#dc2626', marginTop:8 }}>{previewError}</div>}
+        </div>
+
+        {saved && <div style={{ color:'#16a34a' }}>설정이 저장되었습니다.</div>}
+      </div>
+    </div>
+  );
+}
