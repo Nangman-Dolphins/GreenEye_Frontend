@@ -1,3 +1,4 @@
+// src/context/AuthContext.jsx
 import React, { createContext, useEffect, useMemo, useState } from 'react';
 
 export const AuthContext = createContext({
@@ -8,7 +9,8 @@ export const AuthContext = createContext({
 });
 
 const STORAGE_KEY = 'auth_token';
-const API_BASE = import.meta.env.VITE_API_BASE || ''; // 프록시 쓰면 '' 유지
+const API_BASE = import.meta.env.VITE_API_BASE || '';            // 예: http://127.0.0.1:8000
+const USE_CREDENTIALS = import.meta.env.VITE_USE_CREDENTIALS === '1'; // 1이면 쿠키 동봉, 그 외 omit
 
 export function AuthProvider({ children }) {
   const [token, setToken] = useState(null);
@@ -31,30 +33,30 @@ export function AuthProvider({ children }) {
     localStorage.removeItem(STORAGE_KEY);
   };
 
+  // ✅ 전체본: ENV로 credentials 토글 + 토큰 헤더 + JSON Content-Type 자동
   const authFetch = async (path, init = {}) => {
-    // ✅ DEV에서는 /api/* 는 무조건 상대경로 → MSW가 100% 인터셉트
-    const isApiPath = typeof path === 'string' && path.startsWith('/api/');
-    const useRelativeForMSW = import.meta.env.DEV && isApiPath;
-    const url = useRelativeForMSW
-      ? path
-      : (path.startsWith('http') ? path : `${API_BASE}${path}`);
+    const url = path.startsWith('http') ? path : `${API_BASE}${path}`;
 
     const headers = new Headers(init.headers || {});
-    if (!headers.has('Accept')) headers.set('Accept', 'application/json');
-    if (token) headers.set('Authorization', `Bearer ${token}`);
+    // 토큰이 있으면 Authorization 자동 부착(쿠키 기반이든 아니든 안전)
+    if (token && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    // JSON 바디일 때만 Content-Type 지정(FormData는 자동으로 경계값 붙음)
     if (!headers.has('Content-Type') && init.body && !(init.body instanceof FormData)) {
       headers.set('Content-Type', 'application/json');
     }
 
-    const isGet = !init.method || String(init.method).toUpperCase() === 'GET';
-    const fetchInit = {
-      credentials: 'include',
-      cache: isGet ? (init.cache || 'no-store') : (init.cache || 'no-store'),
+    // ENV로 쿠키 동봉 여부 결정 (CORS 문제가 있으면 omit로 두세요)
+    const credentials = USE_CREDENTIALS ? 'include' : 'omit';
+
+    return fetch(url, {
       ...init,
       headers,
-    };
-
-    return fetch(url, fetchInit);
+      credentials,
+      // 캐시가 남아 오작동하면 아래 주석 해제
+      // cache: 'no-store',
+    });
   };
 
   const value = useMemo(() => ({ token, login, logout, authFetch }), [token]);

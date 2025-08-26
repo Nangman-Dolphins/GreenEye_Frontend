@@ -3,6 +3,7 @@ body {
   margin: 0;
   font-family: sans-serif;
   background: #f5f5f5;
+  color:black;
 }
 .sensor-card,
 .control-panel,
@@ -83,3 +84,42 @@ body {
 /* 혹시 body/#root 쪽에서 레이아웃을 잘라도 모두 해제 */
 html, body, #root{ height:100%; }
 body, #root{ overflow: visible !important; }
+/* ===== 강제 라이트/검정 글자색 보호 레이어 (추가) ===== */
+
+/* 브라우저/OS 자동 다크모드의 색 반전을 막음 */
+:root { color-scheme: light; }
+
+/* 앱 전체의 기본 글자색을 검정으로 고정 */
+#root {
+  color: #111;          /* 기본 텍스트 컬러 */
+}
+
+/* 일부 브라우저(특히 Edge/Chrome) 다크 강제에서 텍스트 채색이 뒤집히는 이슈 방지 */
+#root * {
+  -webkit-text-fill-color: currentColor;
+}
+
+/* 카드/패널류 컨테이너에서 글자색 보강(선택) */
+.login-form,
+.sensor-card,
+.control-panel,
+.gallery-card,
+.settings-card,
+.device-link-card {
+  color: #111;     /* 배경은 흰색(#fff)이므로 텍스트는 항상 검정 */
+}
+
+/* 폼 요소 기본 글자색도 검정 고정 + 배경 흰색으로 고정 */
+input, select, textarea {
+  color: #111 !important;
+  background: #fff;
+}
+
+/* 플레이스홀더 가독성 */
+::placeholder {
+  color: #6b7280;
+  opacity: 1;
+}
+
+/* 필요 시 개별 요소에 붙여 쓰는 유틸리티 */
+.text-black { color: #111 !important; }
