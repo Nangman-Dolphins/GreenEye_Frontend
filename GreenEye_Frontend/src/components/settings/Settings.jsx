@@ -1,10 +1,8 @@
-import React, { useEffect, useRef, useState, useContext } from 'react';
+import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
 const LS_SETTINGS = 'greeneye_settings';
-const SNAPSHOT_PATH_DEFAULT = '/api/camera/snapshot';
-const REFRESH_SEC_DEFAULT   = 3;
 
 const MODE_PRESETS = {
   ultra_low:  { label: '초저전력', ccu: 10, sense: 120, capture: 240, days: 40 },
@@ -56,11 +54,6 @@ export default function Settings() {
 
   const [devices, setDevices] = useState([]);
   const [loadingDevs, setLoadingDevs] = useState(true);
-
-  const [previewOn, setPreviewOn] = useState(false);
-  const [previewError, setPreviewError] = useState('');
-  const [cacheBust, setCacheBust] = useState(Date.now());
-  const timerRef = useRef(null);
 
   /* 서버 목록 + 로컬 임시 목록 유니온 */
   useEffect(() => {
@@ -144,11 +137,6 @@ export default function Settings() {
     const data = { operationMode: form.operationMode, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture, nightFlashMode: form.nightFlashMode || 'always_on', cameraTargetDevice: form.cameraTargetDevice || '' };
     saveSettings(data); setForm(data); setSaved(true); setTimeout(()=>setSaved(false), 1200); };
 
-  const stopTimer = () => { if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null; } };
-  const startPreview = () => { setPreviewError(''); if (!form.cameraTargetDevice) return setPreviewError('카메라 대상 기기를 먼저 선택하세요.');
-    setPreviewOn(true); stopTimer(); timerRef.current = setInterval(()=>setCacheBust(Date.now()), REFRESH_SEC_DEFAULT*1000); };
-  const stopPreview = () => { setPreviewOn(false); setPreviewError(''); stopTimer(); };
-
   const card = { background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)', padding:16, marginBottom:16 };
   const section = (title) => <h3 style={{ margin:'0 0 12px' }}>{title}</h3>;
 
@@ -161,7 +149,35 @@ export default function Settings() {
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f3f4f6' }}>
       <div style={{ width: 820, padding:24, background:'#fff', borderRadius:10, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
-        <h2 style={{ marginTop:0 }}>설정</h2>
+        
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
+  <h2 style={{ margin:0 }}>설정</h2>
+  <div style={{display:'flex', gap:8}}>
+    <button
+      type="button"
+      onClick={() => navigate(-1)}
+      style={{
+        padding:'8px 12px', borderRadius:8,
+        border:'1px solid #374151', background:'#374151',
+        color:'#fff', fontWeight:700
+      }}
+    >
+      뒤로
+    </button>
+    <button
+      type="button"
+      onClick={handleSave}
+      style={{
+        padding:'8px 12px', borderRadius:8,
+        border:'1px solid #1d4ed8', background:'#1d4ed8',
+        color:'#fff', fontWeight:700
+      }}
+    >
+      설정 저장
+    </button>
+  </div>
+</div>
+
 
         <div style={card}>
           {section('운용 모드 & 플래시')}
@@ -204,33 +220,6 @@ export default function Settings() {
                 );
               })}
             </div>)}
-        </div>
-
-        <div style={card}>
-          {section('카메라 프리뷰')}
-          <div style={{ display:'flex', gap:8, marginBottom:12, alignItems:'center' }}>
-            <button onClick={previewOn ? (()=>{setPreviewOn(false);}) : (()=>{ if(!form.cameraTargetDevice) return; setPreviewOn(true); if (timerRef.current) clearInterval(timerRef.current); timerRef.current=setInterval(()=>setCacheBust(Date.now()), REFRESH_SEC_DEFAULT*1000);})}
-                    type="button"
-                    disabled={!form.cameraTargetDevice}
-                    style={{ padding:'8px 12px', background: previewOn ? '#dc2626' : '#059669', color:'#fff', border:'none', borderRadius:4,
-                             cursor: form.cameraTargetDevice ? 'pointer' : 'not-allowed' }}>
-              {previewOn ? '프리뷰 끄기' : '프리뷰 켜기'}
-            </button>
-            {!form.cameraTargetDevice && <span style={{ color:'#6b7280' }}>카메라 대상 기기를 먼저 선택하세요.</span>}
-            <div style={{ flex:1 }} />
-            <button onClick={()=>navigate(-1)} type="button" style={{ padding:'8px 12px', background:'#374151', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>뒤로</button>
-            <button onClick={()=>{ const p=MODE_PRESETS[form.operationMode]||MODE_PRESETS.normal; const data={operationMode:form.operationMode, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture, nightFlashMode:form.nightFlashMode||'always_on', cameraTargetDevice:form.cameraTargetDevice||''}; saveSettings(data); setForm(data); setSaved(true); setTimeout(()=>setSaved(false),1200); }}
-                    type="button" style={{ padding:'8px 12px', background:'#1e40af', color:'#fff', border:'none', borderRadius:4, cursor:'pointer' }}>
-              설정 저장
-            </button>
-          </div>
-          <div style={{ border:'1px solid #e5e7eb', borderRadius:8, overflow:'hidden', background:'#000', aspectRatio:'16/9', display:'flex', alignItems:'center', justifyContent:'center' }}>
-            {!previewOn ? <div style={{ color:'#9ca3af' }}>프리뷰가 꺼져 있습니다.</div> :
-              (() => { const src = `${SNAPSHOT_PATH_DEFAULT}?deviceCode=${encodeURIComponent(form.cameraTargetDevice)}&t=${cacheBust}`; return (
-                <img src={src} alt="snapshot" onError={()=>setPreviewError('스냅샷을 불러오지 못했습니다.')} style={{ width:'100%', height:'100%', objectFit:'contain' }} />
-              ); })()}
-          </div>
-          {previewError && <div style={{ color:'#dc2626', marginTop:8 }}>{previewError}</div>}
         </div>
 
         {saved && <div style={{ color:'#16a34a' }}>설정이 저장되었습니다.</div>}

@@ -102,7 +102,7 @@ function makeDummySnapshot(deviceId, sensingMs) {
  * - 탭 다시 보이면(visibilitychange)·온라인 복구 시(online) 즉시 재조회
  * - 에러여도 이전 값 유지 + 더미로 대체
  */
-export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
+export default function SensorInfo({ deviceCode, plantId, deviceName = '', aiNote = '' }) {
   const { authFetch } = useContext(AuthContext) || {};
   const targetId = deviceCode || plantId || '';
 
@@ -209,9 +209,9 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
 
   const title = (deviceName && deviceName.trim()) || targetId || '미선택';
 
-  // 기존 디자인 유지
   return (
     <div style={{ background: '#fff', borderRadius: 8, boxShadow: '0 1px 4px rgba(0,0,0,0.1)', padding: 16 }}>
+      {/* 헤더 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <div style={{ fontWeight: 700, fontSize: 18 }}>🌱 {title} 센서 정보</div>
         <div
@@ -221,20 +221,55 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
           <span role="img" aria-label="battery">🔋</span>{data.battery ?? 0}%
         </div>
       </div>
+
+      {/* 본문: 환경/토양 카드 + AI 진단 카드 */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {/* 환경 */}
         <div style={{ background: '#f8fafc', borderRadius: 8, padding: 16, border: '1px solid #e5e7eb' }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>🖼️ 환경</div>
           <div>🌡️ 온도: <b>{Number(data.env?.temp ?? 0)} °C</b></div>
           <div>💧 습도: <b>{Number(data.env?.humi ?? 0)} %</b></div>
           <div>💡 광도: <b>{Number(data.env?.lux ?? 0)} lx</b></div>
         </div>
+
+        {/* 토양 */}
         <div style={{ background: '#f8fafc', borderRadius: 8, padding: 16, border: '1px solid #e5e7eb' }}>
           <div style={{ fontWeight: 700, marginBottom: 8 }}>🪴 토양</div>
           <div>🌡️ 온도: <b>{Number(data.soil?.temp ?? 0)} °C</b></div>
           <div>💧 수분: <b>{Number(data.soil?.moisture ?? 0)} %</b></div>
           <div>⚡ 전도도: <b>{Number(data.soil?.ec ?? 0)} mS/cm</b></div>
         </div>
+
+        {/* AI 진단 한 줄 (환경/토양과 동일 톤, 전체폭) */}
+        <div
+          style={{
+            gridColumn: '1 / -1',
+            background: '#f8fafc',
+            borderRadius: 8,
+            padding: 16,
+            border: '1px solid #e5e7eb',
+            display: 'flex',
+            alignItems: 'center',
+            minHeight: 44,
+            color: '#111',
+          }}
+        >
+          <div style={{ fontWeight: 700, marginRight: 8 }}>🤖 AI 진단</div>
+          <div
+            style={{
+              flex: 1,
+              opacity: aiNote ? 1 : 0.55,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+            title={aiNote || 'AI 진단 한 줄이 여기에 표시됩니다.'}
+          >
+            {aiNote || 'AI 진단 한 줄이 여기에 표시됩니다.'}
+          </div>
+        </div>
       </div>
+
       {loading && <div style={{ marginTop: 8, color: '#6b7280' }}>불러오는 중…</div>}
     </div>
   );
