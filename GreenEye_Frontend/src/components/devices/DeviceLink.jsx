@@ -154,7 +154,6 @@ export default function DeviceLink({ speciesOptions }) {
   const [species, setSpecies] = useState("");
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState("");
-  const [offline, setOffline] = useState(true);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
 
@@ -233,25 +232,6 @@ export default function DeviceLink({ speciesOptions }) {
       const deviceCode = mac; // 정규형 그대로
       const img = await ensureThumb(mac);
 
-      if (offline) {
-        // 로컬 반영
-        writeThumb(token, deviceCode, img);
-        writeMeta(token, deviceCode, { species, room, ownerEmail: email });
-        upsertClientDev(token, {
-          deviceCode,
-          name: name.trim(),
-          imageUrl: img,
-          species,
-          room,
-        });
-        broadcast();
-        alert("임시(오프라인) 기기 등록 완료");
-        return navigate("/dashboard", {
-          replace: true,
-          state: { addedDevice: { deviceCode } }, // 선택 유지
-        });
-      }
-
       // 온라인 등록(서버 전송 + 로컬 즉시 반영)
       const payload = {
         email,
@@ -298,42 +278,27 @@ export default function DeviceLink({ speciesOptions }) {
         display: "flex",
         alignItems: "flex-start",
         justifyContent: "center",
-        background: "#f6f7fb",
+        background: "var(--ge-bg)",
         padding: "32px 12px",
       }}
     >
       <form
+       id="device-link-form"
         onSubmit={onSubmit}
         style={{
-          width: 640,
-          maxWidth: "100%",
-          background: "#fff",
-          borderRadius: 10,
-          boxShadow: "0 8px 24px rgba(0,0,0,.06)",
-          padding: 24,
-          color: "#111",
-        }}
-      >
+         width: 640,
+        maxWidth: "100%",
+        background: "#fff",
+        borderRadius: 10,
+        boxShadow: "0 8px 24px rgba(0,0,0,.06)",
+        padding: 24,
+        color: "#111",
+      }}
+>
+
         <h1 style={{ fontSize: 28, margin: "4px 0 18px", fontWeight: 800 }}>
           기기 연결 + 사진 등록
         </h1>
-
-        <label
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            marginBottom: 16,
-            userSelect: "none",
-          }}
-        >
-          <input
-            type="checkbox"
-            checked={offline}
-            onChange={(e) => setOffline(e.target.checked)}
-          />
-          오프라인 임의 연결(서버 호출 없이 로컬에 저장)
-        </label>
 
         {err && (
           <div
@@ -401,28 +366,26 @@ export default function DeviceLink({ speciesOptions }) {
           />
         </div>
 
-        {/* 식물종 */}
+        {/* 식물종 (드롭다운 전용) */}
         <div style={{ marginBottom: 12 }}>
-          <div style={{ fontWeight: 700, marginBottom: 6 }}>식물종(Species)</div>
-          <input
-            list="species-list"
-            value={species}
-            onChange={(e) => setSpecies(e.target.value)}
-            placeholder="Petunia / Hydrangea ..."
-            className="form-input"
-            style={{
-              width: "100%",
-              padding: "12px 14px",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-            }}
-          />
-          <datalist id="species-list">
-            {spList.map((sp) => (
-              <option key={sp} value={sp} />
-            ))}
-          </datalist>
-        </div>
+        <div style={{ fontWeight: 700, marginBottom: 6 }}>식물종(Species)</div>
+        <select
+        value={species}
+        onChange={(e) => setSpecies(e.target.value)}
+        style={{
+        width: "100%",
+        padding: "12px 14px",
+        border: "1px solid #e5e7eb",
+        borderRadius: 8,
+        background: "#fff",
+        }}
+      >
+        <option value="" disabled>식물종을 선택하세요</option>
+        {spList.map((sp) => (
+          <option key={sp} value={sp}>{sp}</option>
+          ))}
+        </select>
+      </div>
 
         {/* 등록 사진 */}
         <div style={{ marginBottom: 8 }}>
@@ -474,7 +437,7 @@ export default function DeviceLink({ speciesOptions }) {
             cursor: "pointer",
           }}
         >
-          {loading ? "등록 중…" : offline ? "오프라인 임의 등록" : "기기 등록"}
+         {loading ? "등록 중…" : "기기 등록"}
         </button>
 
         <button

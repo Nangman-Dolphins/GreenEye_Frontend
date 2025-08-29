@@ -229,7 +229,7 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '', aiNot
           <div style={{ fontWeight: 700, marginBottom: 8 }}>🖼️ 환경</div>
           <div>🌡️ 온도: <b>{Number(data.env?.temp ?? 0)} °C</b></div>
           <div>💧 습도: <b>{Number(data.env?.humi ?? 0)} %</b></div>
-          <div>💡 광도: <b>{Number(data.env?.lux ?? 0)} lx</b></div>
+          <div>💡 광도: <b>{Number(data.env?.lux ?? 0)} lux</b></div>
         </div>
 
         {/* 토양 */}
@@ -237,7 +237,7 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '', aiNot
           <div style={{ fontWeight: 700, marginBottom: 8 }}>🪴 토양</div>
           <div>🌡️ 온도: <b>{Number(data.soil?.temp ?? 0)} °C</b></div>
           <div>💧 수분: <b>{Number(data.soil?.moisture ?? 0)} %</b></div>
-          <div>⚡ 전도도: <b>{Number(data.soil?.ec ?? 0)} mS/cm</b></div>
+          <div>⚡ 전도도: <b>{Number(data.soil?.ec ?? 0)} μS/cm</b></div>
         </div>
 
         {/* AI 진단 한 줄 (환경/토양과 동일 톤, 전체폭) */}

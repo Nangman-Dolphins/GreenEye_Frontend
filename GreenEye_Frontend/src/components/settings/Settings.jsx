@@ -147,7 +147,7 @@ export default function Settings() {
   };
 
   return (
-    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#f3f4f6' }}>
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'var(--ge-bg)' }}>
       <div style={{ width: 820, padding:24, background:'#fff', borderRadius:10, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
         
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>

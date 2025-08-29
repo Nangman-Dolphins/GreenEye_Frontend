@@ -56,7 +56,7 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: '#f5f5f5',
+        background: 'var(--ge-bg)',   // ← 여기만 변경
       }}
     >
       <form onSubmit={onSubmit} className="login-form">

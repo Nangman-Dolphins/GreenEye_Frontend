@@ -66,3 +66,38 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+/* === Global background unify (one gray) === */
+:root {
+  --ge-bg: #f8fafc;   /* 통일할 회색 */
+  --ge-text: #111;    /* 가독성 고정 */
+}
+
+/* 페이지 바탕 */
+html, body, #root {
+  background: var(--ge-bg) !important;
+  color: var(--ge-text) !important;
+}
+
+/* 레이아웃/카드 계열을 모두 동일 배경으로 */
+main, section, article, aside, header, footer,
+.container, .wrapper, .content, .panel, .card {
+  background: var(--ge-bg) !important;
+}
+
+/* 인라인 style로 흰색/다른 회색을 지정한 요소도 강제 통일 */
+div[style*="background:#fff"],
+div[style*="background: #fff"],
+div[style*="background:#f3f4f6"],
+div[style*="background: #f3f4f6"],
+div[style*="background:#f8fafc"],
+div[style*="background: #f8fafc"] {
+  background: var(--ge-bg) !important;
+}
+/* DeviceLink: 모든 입력/셀렉트 폭을 카드 전체폭으로 강제 */
+#device-link-form input,
+#device-link-form select,
+#device-link-form textarea {
+  width: 100% !important;
+  box-sizing: border-box;
+  display: block;
+}
