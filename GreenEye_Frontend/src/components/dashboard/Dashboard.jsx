@@ -117,7 +117,11 @@ export default function Dashboard() {
     }
   };
 
-  useEffect(() => { reloadDevices(); }, [authFetch, token]);
+  // useEffect(() => { reloadDevices(); }, [authFetch, token]); !삭제!(401에러)
+  useEffect(() => {        // !추가(4줄)!
+   if (!token) return;     // ☆ 토큰 준비되면 그때 호출
+   reloadDevices();
+ }, [authFetch, token]);
 
   /* 등록 직후 선택 유지 */
   useEffect(() => {

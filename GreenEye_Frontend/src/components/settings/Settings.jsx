@@ -1,15 +1,16 @@
+// src/components/settings/Settings.jsx
 import React, { useEffect, useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
 
 const LS_SETTINGS = 'greeneye_settings';
-
+// 요구 반영
 const MODE_PRESETS = {
   ultra_low:  { label: '초저전력', ccu: 10, sense: 120, capture: 240, days: 40 },
   low:        { label: '저전력',   ccu: 10, sense: 60,  capture: 120, days: 38 },
   normal:     { label: '일반',     ccu: 10, sense: 30,  capture: 60,  days: 34 },
   high:       { label: '고빈도',   ccu: 10, sense: 15,  capture: 60,  days: 32 },
-  ultra_high: { label: '초고빈도', ccu: 10, sense: 1,   capture: 30,  days: 30 }, // 요구 반영
+  ultra_high: { label: '초고빈도', ccu: 10, sense: 10,  capture: 30,  days: 30 }, 
 };
 
 /* 계정별 키/리더 */
@@ -45,6 +46,15 @@ const normDevice = (x = {}) => {
 function loadSettings() { try { const raw=localStorage.getItem(LS_SETTINGS); return raw?JSON.parse(raw):{...DEFAULTS}; } catch { return { ...DEFAULTS }; } }
 function saveSettings(data) { localStorage.setItem(LS_SETTINGS, JSON.stringify(data)); window.dispatchEvent(new CustomEvent('greeneye:settings-updated')); }
 const humanizeMin = (m) => (Number(m) % 60 === 0 ? `${Number(m) / 60}h` : `${Number(m) || 0}m`);
+
+/* === 추가: API device_id/플래시 정규화 헬퍼 === */
+// API용 device_id 추출: 'ge-sd-2e52' → '2e52'
+const deviceIdForApi = (code) => {
+  const m = String(code || '').match(/([0-9a-fA-F]{4})$/);
+  return m ? m[1].toLowerCase() : '';
+};
+// 플래시 옵션 표준화 (과거 off_night_only도 night_off로)
+const normalizeFlash = (v) => (v === 'off_night_only' ? 'night_off' : (v || 'always_on'));
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -133,9 +143,55 @@ export default function Settings() {
 
   const onChange = (e) => setForm(s => ({ ...s, [e.target.name]: e.target.value }));
   const applyMode = (k) => { const p = MODE_PRESETS[k] || MODE_PRESETS.normal; setForm(s => ({ ...s, operationMode:k, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture })); };
-  const handleSave = () => { const p = MODE_PRESETS[form.operationMode] || MODE_PRESETS.normal;
-    const data = { operationMode: form.operationMode, ccuIntervalMinutes:p.ccu, sensingIntervalMinutes:p.sense, captureIntervalMinutes:p.capture, nightFlashMode: form.nightFlashMode || 'always_on', cameraTargetDevice: form.cameraTargetDevice || '' };
-    saveSettings(data); setForm(data); setSaved(true); setTimeout(()=>setSaved(false), 1200); };
+
+  /* === 변경: 저장 시 API 호출 포함 (기존 로컬 저장 유지) === */
+  const handleSave = async () => {
+    const p = MODE_PRESETS[form.operationMode] || MODE_PRESETS.normal;
+
+    // 1) 로컬 저장(기존 동작 그대로 유지)
+    const data = {
+      operationMode: form.operationMode,
+      ccuIntervalMinutes: p.ccu,
+      sensingIntervalMinutes: p.sense,
+      captureIntervalMinutes: p.capture,
+      nightFlashMode: form.nightFlashMode || 'always_on',
+      cameraTargetDevice: form.cameraTargetDevice || '',
+    };
+    saveSettings(data);
+    setForm(data);
+    setSaved(true);
+
+    // 2) 서버 적용 (device 선택된 경우에만 시도)
+    try {
+      const devId = deviceIdForApi(data.cameraTargetDevice);
+      if (!devId) {
+        // 기기 미선택이면 로컬 저장만 하고 종료
+        return;
+      }
+
+      const payload = {
+        mode: data.operationMode,                          // "ultra_low" | ... | "ultra_high"
+        flash_option: normalizeFlash(data.nightFlashMode), // always_on | always_off | night_off
+      };
+
+      const res = await authFetch(`/api/control_mode/${devId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
+        throw new Error(msg);
+      }
+      // 성공 시: 상단 '설정이 저장되었습니다.' 메시지로 충분
+    } catch (e) {
+      alert(`서버 적용 실패: ${e.message || e}`);
+    } finally {
+      setTimeout(()=>setSaved(false), 1200);
+    }
+  };
 
   const card = { background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)', padding:16, marginBottom:16 };
   const section = (title) => <h3 style={{ margin:'0 0 12px' }}>{title}</h3>;
@@ -151,33 +207,32 @@ export default function Settings() {
       <div style={{ width: 820, padding:24, background:'#fff', borderRadius:10, boxShadow:'0 1px 4px rgba(0,0,0,0.1)' }}>
         
         <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:12}}>
-  <h2 style={{ margin:0 }}>설정</h2>
-  <div style={{display:'flex', gap:8}}>
-    <button
-      type="button"
-      onClick={() => navigate(-1)}
-      style={{
-        padding:'8px 12px', borderRadius:8,
-        border:'1px solid #374151', background:'#374151',
-        color:'#fff', fontWeight:700
-      }}
-    >
-      뒤로
-    </button>
-    <button
-      type="button"
-      onClick={handleSave}
-      style={{
-        padding:'8px 12px', borderRadius:8,
-        border:'1px solid #1d4ed8', background:'#1d4ed8',
-        color:'#fff', fontWeight:700
-      }}
-    >
-      설정 저장
-    </button>
-  </div>
-</div>
-
+          <h2 style={{ margin:0 }}>설정</h2>
+          <div style={{display:'flex', gap:8}}>
+            <button
+              type="button"
+              onClick={() => navigate(-1)}
+              style={{
+                padding:'8px 12px', borderRadius:8,
+                border:'1px solid #374151', background:'#374151',
+                color:'#fff', fontWeight:700
+              }}
+            >
+              뒤로
+            </button>
+            <button
+              type="button"
+              onClick={handleSave}
+              style={{
+                padding:'8px 12px', borderRadius:8,
+                border:'1px solid #1d4ed8', background:'#1d4ed8',
+                color:'#fff', fontWeight:700
+              }}
+            >
+              설정 저장
+            </button>
+          </div>
+        </div>
 
         <div style={card}>
           {section('운용 모드 & 플래시')}
@@ -192,8 +247,11 @@ export default function Settings() {
             <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>촬영 주기</label>
               <input value={humanize(MODE_PRESETS[form.operationMode].capture)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
             <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>밤 플래시</label>
+              {/* === 변경: night_off 값 사용 === */}
               <select name="nightFlashMode" value={form.nightFlashMode} onChange={onChange} style={{ width:220, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
-                <option value="always_on">항시 ON</option><option value="always_off">항시 OFF</option><option value="off_night_only">밤에만 OFF</option>
+                <option value="always_on">항시 ON</option>
+                <option value="always_off">항시 OFF</option>
+                <option value="night_off">밤에만 OFF</option>
               </select></div>
           </div>
         </div>
