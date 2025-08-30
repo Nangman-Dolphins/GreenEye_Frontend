@@ -200,18 +200,16 @@ export default function DeviceLink({ speciesOptions }) {
     return makeTextThumb(code);
   };
 
-  // 서버 전송(JSON, image_base64)
-  async function sendRegister(payload) {
+  // sendRegister 함수를 수정, FormData를 받도록 변경
+  async function sendRegister(formData) {
     const res = await (authFetch
       ? authFetch("/api/register_device", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: formData,
         })
       : fetch((import.meta.env.VITE_API_BASE || "") + "/api/register_device", {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
+          body: formData,
           credentials: "include",
         }));
     if (!res.ok) throw new Error(`register_device failed: ${res.status}`);
@@ -232,21 +230,24 @@ export default function DeviceLink({ speciesOptions }) {
       const deviceCode = mac; // 정규형 그대로
       const img = await ensureThumb(mac);
 
-      // 온라인 등록(서버 전송 + 로컬 즉시 반영)
-      const payload = {
-        email,
-        mac_address: mac,
-        friendly_name: name.trim(),
-        room,
-        species,
-        image_base64: img || null,
-      };
-      try {
-        await sendRegister(payload);
-      } catch (ex) {
-        console.warn("[register_device] send failed:", ex?.message || ex);
+      // FormData 객체 생성
+      const formData = new FormData();
+      formData.append("mac_address", mac);
+      formData.append("friendly_name", name.trim());
+      formData.append("room", room);
+      formData.append("species", species); // 백엔드 필드명과 맞춤
+
+      if (file) {
+        formData.append("image", file); // 파일 자체를 전송
+      } else {
+        // 이미지가 없을 경우, `image_base64` 필드로 대체
+        formData.append("image_base64", makeTextThumb(mac));
       }
 
+      // 서버 전송
+      await sendRegister(formData);
+
+      // 로컬 스토리지에 데이터 저장
       writeThumb(token, deviceCode, img);
       writeMeta(token, deviceCode, { species, room, ownerEmail: email });
       upsertClientDev(token, {
@@ -257,7 +258,7 @@ export default function DeviceLink({ speciesOptions }) {
         room,
       });
       broadcast();
-
+      
       alert("기기 연결 성공!");
       navigate("/dashboard", {
         replace: true,
