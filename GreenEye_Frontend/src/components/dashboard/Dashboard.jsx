@@ -58,10 +58,10 @@ const normDevice = (x = {}) => {
   return {
     deviceCode: code,
     rawCode: raw || code,
-    name: x.name ?? x.friendly_name ?? code,
-    imageUrl: x.imageUrl ?? x.thumbnail_url ?? x.photoUrl ?? x.image_filename ?? '',
+    name: x.name ?? code,
+    imageUrl: x.device_image ?? '',
     room: x.room ?? '',
-    species: x.species ?? '',
+    species: x.plant_type ?? '',
   };
 };
 
