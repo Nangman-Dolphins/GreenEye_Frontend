@@ -80,19 +80,20 @@ export default function Dashboard() {
       const arr = r.ok ? (await r.json()) : [];
       const api = Array.isArray(arr) ? arr.map(normDevice) : [];
 
-      const locals = readClientDevs(token).map(normDevice);
-      const legacy = read(LS_DEVICES_LEGACY, []).map(normDevice);
+      //const locals = readClientDevs(token).map(normDevice);
+      //const legacy = read(LS_DEVICES_LEGACY, []).map(normDevice);
 
       // 오프라인/로컬에서 재등록된 코드는 삭제 캐시에서 자동 복구
       const del = readDeleted(token);
-      locals.forEach(d => del.delete(d.deviceCode));
+      //locals.forEach(d => del.delete(d.deviceCode));
       write(deletedKeyForUser(token), [...del]);
 
       const thumbs = readThumbs(token);
       const meta   = readMeta(token);
 
       const map = new Map();
-      [...locals, ...legacy, ...api].forEach(d => {
+      //[...locals, ...legacy, ...api].forEach(d => {
+      [...api].forEach(d => {
         if (!d.deviceCode) return;
         if (del.has(d.deviceCode)) return; // 삭제된 것은 무조건 숨김
         const prev = map.get(d.deviceCode) || {};
@@ -106,6 +107,9 @@ export default function Dashboard() {
       });
       setDevices([...map.values()]);
     } catch {
+      console.error("Device fetch failed:", error);
+      //alert("기기 목록을 불러오는 중 문제가 발생했습니다.");
+      /*
       const del = readDeleted(token);
       const locals = readClientDevs(token).map(normDevice);
       const thumbs = readThumbs(token);
@@ -114,6 +118,7 @@ export default function Dashboard() {
         .filter(d => !del.has(d.deviceCode))
         .map(d => ({ ...d, imageUrl: thumbs[d.deviceCode] ?? d.imageUrl, species: meta[d.deviceCode]?.species ?? d.species, room: meta[d.deviceCode]?.room ?? d.room }));
       setDevices(list);
+      */
     }
   };
 

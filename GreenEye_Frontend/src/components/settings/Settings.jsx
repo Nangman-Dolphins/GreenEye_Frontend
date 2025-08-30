@@ -22,6 +22,15 @@ const clientDevsKeyForUser = (t) => `greeneye_client_devices:${userKeyFromToken(
 const readThumbs = (t) => { try { return JSON.parse(localStorage.getItem(thumbsKeyForUser(t)) || '{}'); } catch { return {}; } };
 const readMeta   = (t) => { try { return JSON.parse(localStorage.getItem(metaKeyForUser(t))   || '{}'); } catch { return {}; } };
 const readClientDevs = (t) => { try { return JSON.parse(localStorage.getItem(clientDevsKeyForUser(t)) || '[]'); } catch { return []; } };
+/** 영숫자 소문자만 */
+const alnum = (s) => String(s ?? '').toLowerCase().replace(/[^0-9a-z]/g, '');
+/** 마지막 4자리(영숫자) */
+const last4 = (s) => alnum(s).slice(-4);
+/** 정규형: ge-sd-xxxx (xxxx는 16진 4자리면 적용, 아니면 알파넘 그대로 반환) */
+const canonical = (s) => {
+  const tail = last4(s);
+  return /^[0-9a-f]{4}$/.test(tail) ? `ge-sd-${tail}` : alnum(s);
+};
 
 const DEFAULTS = {
   operationMode: 'normal',
@@ -33,9 +42,11 @@ const DEFAULTS = {
 };
 
 const normDevice = (x = {}) => {
-  const code = String(x.deviceCode ?? x.device_id ?? x.device_code ?? x.mac ?? '').trim();
+  const raw = String(x.deviceCode ?? x.device_id ?? x.device_code ?? x.mac ?? '').trim();
+  const code = canonical(raw);
   return {
     deviceCode: code,
+    rawCode: raw || code,
     name: x.name ?? x.friendly_name ?? code,
     imageUrl: x.imageUrl ?? x.thumbnail_url ?? x.photoUrl ?? x.image_filename ?? '',
     room: x.room ?? '',
@@ -75,24 +86,22 @@ export default function Settings() {
         const arr = r.ok ? (await r.json()) : [];
         const api = Array.isArray(arr) ? arr.map(normDevice) : [];
 
-        const locals = readClientDevs(token).map(normDevice);
+        //const locals = readClientDevs(token).map(normDevice);
         const tmap = readThumbs(token);
         const mmap = readMeta(token);
 
         const map = new Map();
-        [...locals, ...api].forEach(d => {
+        [...api].forEach(d => {
           const prev = map.get(d.deviceCode) || {};
-          const merged = {
+          map.set(d.deviceCode, {
             ...prev,
             ...d,
             imageUrl: tmap[d.deviceCode] ?? d.imageUrl ?? prev.imageUrl,
             species: (mmap[d.deviceCode]?.species ?? d.species ?? prev.species),
             room:    (mmap[d.deviceCode]?.room    ?? d.room    ?? prev.room),
-          };
-          map.set(d.deviceCode, merged);
+          });
         });
-
-        if (!cancelled) setDevices([...map.values()]);
+        setDevices([...map.values()]);
       } catch {
         if (!cancelled) setDevices(readClientDevs(token).map(normDevice));
       } finally {
@@ -119,14 +128,13 @@ export default function Settings() {
           const map = new Map();
           [...locals, ...api].forEach(d => {
             const prev = map.get(d.deviceCode) || {};
-            const merged = {
+            map.set(d.deviceCode, {
               ...prev,
               ...d,
               imageUrl: tmap[d.deviceCode] ?? d.imageUrl ?? prev.imageUrl,
               species: (mmap[d.deviceCode]?.species ?? d.species ?? prev.species),
               room:    (mmap[d.deviceCode]?.room    ?? d.room    ?? prev.room),
-            };
-            map.set(d.deviceCode, merged);
+            });
           });
           setDevices([...map.values()]);
         })();
