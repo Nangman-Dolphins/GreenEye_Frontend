@@ -254,12 +254,11 @@ export default function Settings() {
               <input value={humanize(MODE_PRESETS[form.operationMode].sense)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
             <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>촬영 주기</label>
               <input value={humanize(MODE_PRESETS[form.operationMode].capture)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
-            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>밤 플래시</label>
+            <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>야간 모드</label>
               {/* === 변경: night_off 값 사용 === */}
               <select name="nightFlashMode" value={form.nightFlashMode} onChange={onChange} style={{ width:220, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
-                <option value="always_on">항시 ON</option>
-                <option value="always_off">항시 OFF</option>
-                <option value="night_off">밤에만 OFF</option>
+                <option value="always_on">ON</option>
+                <option value="always_off">OFF</option>
               </select></div>
           </div>
         </div>
