@@ -11,7 +11,7 @@ const ACTUATORS = [
   {
     id: 'uv', // LED
     label: 'UV',
-    makePayload: (on) => ({ flash_en: on ? 1 : 0 }),
+    makePayload: (on) => ({ uv_action: on ? 1 : 0 }),
   },
   {
     id: 'fan',
