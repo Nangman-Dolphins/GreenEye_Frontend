@@ -55,7 +55,8 @@ function parseSensorPayload(j = {}) {
       },
       plantType: j.plant_type || '',
       timestamp: j.timestamp || null,
-      aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.note || ''),
+      // ✅ AI 한줄평: comment 우선, 없으면 note, 문자열이면 그대로
+      aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
     };
     return out;
   }
@@ -76,7 +77,8 @@ function parseSensorPayload(j = {}) {
     status: { temperature:'unknown', humidity:'unknown', light_lux:'unknown', soil_temp:'unknown', soil_moisture:'unknown', soil_ec:'unknown', battery:'unknown' },
     ranges: { temperature:null, humidity:null, light_lux:null, soil_temp:null, soil_moisture:null, soil_ec:null, battery:null },
     plantType: j.plant_type || '', timestamp: j.timestamp || null,
-    aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.note || ''),
+    // ✅ 동일 규칙 유지
+    aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
   };
 }
 
@@ -124,18 +126,13 @@ const statusLabel = (s) =>
 
 /**
  * 더 강한 대비의 배지 색상
- * - low: 강한 빨강
- * - middle: 선명한 초록
- * - high: 진한 파랑
- * - unknown: 중립 회색
- * 가독성을 위해 text는 모두 white 처리
  */
 function statusTheme(s) {
   switch (s) {
-    case 'low':    return { bg:'#fee2e2', br:'#fecaca', text:'#000000ff', shadow:'0 0 0 1px #991b1b, 0 3px 8px rgba(220,38,38,.25)' };     // red-600
-    case 'middle': return { bg:'#dcfce7', br:'#bbf7d0', text:'#000000ff', shadow:'0 0 0 1px #166534, 0 3px 8px rgba(22,163,74,.22)' };   // green-600
-    case 'high':   return { bg:'#dbeafe', br:'#bfdbfe', text:'#000000ff', shadow:'0 0 0 1px #1e40af, 0 3px 8px rgba(37,99,235,.22)' };   // blue-600
-    default:       return { bg:'#f3f4f6', br:'#e5e7eb', text:'#000000ff', shadow:'0 0 0 1px #4b5563, 0 3px 8px rgba(107,114,128,.18)' }; // gray-500
+    case 'low':    return { bg:'#fee2e2', br:'#fecaca', text:'#000000ff', shadow:'0 0 0 1px #991b1b, 0 3px 8px rgba(220,38,38,.25)' };
+    case 'middle': return { bg:'#dcfce7', br:'#bbf7d0', text:'#000000ff', shadow:'0 0 0 1px #166534, 0 3px 8px rgba(22,163,74,.22)' };
+    case 'high':   return { bg:'#dbeafe', br:'#bfdbfe', text:'#000000ff', shadow:'0 0 0 1px #1e40af, 0 3px 8px rgba(37,99,235,.22)' };
+    default:       return { bg:'#f3f4f6', br:'#e5e7eb', text:'#000000ff', shadow:'0 0 0 1px #4b5563, 0 3px 8px rgba(107,114,128,.18)' };
   }
 }
 
@@ -272,19 +269,19 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
         </div>
       </div>
 
-      {/* 본문: 상태 뷰만 유지 */}
+      {/* 본문: 상태 뷰 */}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
         <div style={grayCard}>
           <div style={{ fontWeight:700, marginBottom:8 }}>🖼️ 환경 상태</div>
-          <StatusRow icon="🌡️" label="온도"  value={data.env?.temp}  unit="°C" status={data.status.temperature} range={data.ranges.temperature} />
-          <StatusRow icon="💧" label="습도"  value={data.env?.humi}  unit="%"  status={data.status.humidity}    range={data.ranges.humidity} />
-          <StatusRow icon="💡" label="광도"  value={data.env?.lux}   unit="lux" status={data.status.light_lux}   range={data.ranges.light_lux} />
+          <StatusRow icon="🌡️" label="온도"  value={data.env?.temp}  unit="°C"  status={data.status.temperature} range={data.ranges.temperature} />
+          <StatusRow icon="💧" label="습도"  value={data.env?.humi}  unit="%"   status={data.status.humidity}    range={data.ranges.humidity} />
+          <StatusRow icon="💡" label="광도"  value={data.env?.lux}   unit="lux"  status={data.status.light_lux}   range={data.ranges.light_lux} />
         </div>
         <div style={grayCard}>
           <div style={{ fontWeight:700, marginBottom:8 }}>🪴 토양 상태</div>
-          <StatusRow icon="🌡️" label="온도"  value={data.soil?.temp}      unit="°C"   status={data.status.soil_temp}     range={data.ranges.soil_temp} />
-          <StatusRow icon="💧" label="수분"  value={data.soil?.moisture}  unit="%"    status={data.status.soil_moisture}  range={data.ranges.soil_moisture} />
-          <StatusRow icon="⚡" label="전도도" value={data.soil?.ec}        unit="μS/cm" status={data.status.soil_ec}      range={data.ranges.soil_ec} />
+          <StatusRow icon="🌡️" label="온도"   value={data.soil?.temp}      unit="°C"    status={data.status.soil_temp}     range={data.ranges.soil_temp} />
+          <StatusRow icon="💧" label="수분"   value={data.soil?.moisture}  unit="%"     status={data.status.soil_moisture}  range={data.ranges.soil_moisture} />
+          <StatusRow icon="⚡" label="전도도"  value={data.soil?.ec}        unit="μS/cm" status={data.status.soil_ec}       range={data.ranges.soil_ec} />
         </div>
       </div>
 
