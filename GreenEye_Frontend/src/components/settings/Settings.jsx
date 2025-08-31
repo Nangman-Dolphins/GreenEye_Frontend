@@ -37,7 +37,7 @@ const DEFAULTS = {
   ccuIntervalMinutes: MODE_PRESETS.normal.ccu,
   sensingIntervalMinutes: MODE_PRESETS.normal.sense,
   captureIntervalMinutes: MODE_PRESETS.normal.capture,
-  nightFlashMode: 'always_on',
+  nightMode: 'night_on',
   cameraTargetDevice: '',
 };
 
@@ -65,7 +65,7 @@ const deviceIdForApi = (code) => {
   return m ? m[1].toLowerCase() : '';
 };
 // 플래시 옵션 표준화 (과거 off_night_only도 night_off로)
-const normalizeFlash = (v) => (v === 'off_night_only' ? 'night_off' : (v || 'always_on'));
+//const normalizeNightMode = (v) => (v === 'off_night_only' ? 'night_off' : (v || 'night_on'));
 
 export default function Settings() {
   const navigate = useNavigate();
@@ -162,7 +162,7 @@ export default function Settings() {
       ccuIntervalMinutes: p.ccu,
       sensingIntervalMinutes: p.sense,
       captureIntervalMinutes: p.capture,
-      nightFlashMode: form.nightFlashMode || 'always_on',
+      nightMode: form.nightMode || 'night_on',
       cameraTargetDevice: form.cameraTargetDevice || '',
     };
     saveSettings(data);
@@ -179,7 +179,7 @@ export default function Settings() {
 
       const payload = {
         mode: data.operationMode,                          // "ultra_low" | ... | "ultra_high"
-        flash_option: normalizeFlash(data.nightFlashMode), // always_on | always_off | night_off
+        night_option: data.nightMode                      // night_on | night_off
       };
 
       const res = await authFetch(`/api/control_mode/${devId}`, {
@@ -256,9 +256,9 @@ export default function Settings() {
               <input value={humanize(MODE_PRESETS[form.operationMode].capture)} readOnly style={{ width:140, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#f9fafb' }}/></div>
             <div><label style={{ fontWeight:600, display:'block', marginBottom:6 }}>야간 모드</label>
               {/* === 변경: night_off 값 사용 === */}
-              <select name="nightFlashMode" value={form.nightFlashMode} onChange={onChange} style={{ width:220, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
-                <option value="always_on">ON</option>
-                <option value="always_off">OFF</option>
+              <select name="nightMode" value={form.nightMode} onChange={onChange} style={{ width:220, padding:'10px 12px', border:'1px solid #ccc', borderRadius:4, background:'#fff' }}>
+                <option value="night_on">ON</option>
+                <option value="night_off">OFF</option>
               </select></div>
           </div>
         </div>
