@@ -1,0 +1,167 @@
+.container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  box-sizing: border-box;
+}
+
+.header {
+  padding: 16px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.backButton {
+  background: none;
+  border: none;
+  padding: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  color: #666;
+}
+
+.backButton:hover {
+  color: #333;
+}
+
+.chatContainer {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 0;
+}
+
+.message {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+  max-width: 80%;
+}
+
+.user {
+  align-self: flex-end;
+  align-items: flex-end;
+}
+
+.bot {
+  align-self: flex-start;
+  align-items: flex-start;
+}
+
+.imageContainer {
+  margin-bottom: 8px;
+  border-radius: 12px;
+  overflow: hidden;
+  max-width: 300px;
+}
+
+.image {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.errorText {
+  color: #e53935;
+}
+
+.typing {
+  padding: 12px 16px;
+  background-color: #f5f5f5;
+  border-radius: 12px;
+  font-size: 14px;
+  color: #666;
+}
+
+.inputContainer {
+  display: flex;
+  gap: 8px;
+  padding: 16px 0;
+  border-top: 1px solid #eee;
+}
+
+.inputContainer input[type="text"] {
+  flex: 1;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 14px;
+}
+
+.inputContainer input[type="text"]:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
+.imageButton {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 20px;
+}
+
+.imageButton[disabled] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.inputContainer button {
+  padding: 0 20px;
+  border: none;
+  border-radius: 8px;
+  background-color: #1976d2;
+  color: white;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.inputContainer button:hover:not(:disabled) {
+  background-color: #1565c0;
+}
+
+.inputContainer button:disabled {
+  background-color: #90caf9;
+  cursor: not-allowed;
+}
+
+/* 메시지 말풍선 스타일 */
+.message > div:not(.imageContainer) {
+  padding: 12px 16px;
+  border-radius: 12px;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+.user > div:not(.imageContainer) {
+  background-color: #1976d2;
+  color: white;
+}
+
+.bot > div:not(.imageContainer) {
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+/* 스크롤바 스타일 */
+.chatContainer::-webkit-scrollbar {
+  width: 6px;
+}
+
+.chatContainer::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.chatContainer::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 3px;
+}
+
+.chatContainer::-webkit-scrollbar-thumb:hover {
+  background: #666;
+}

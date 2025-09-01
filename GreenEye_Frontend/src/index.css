@@ -101,3 +101,44 @@ div[style*="background: #f8fafc"] {
   box-sizing: border-box;
   display: block;
 }
+
+/* src/index.css 파일 맨 아래에 추가 */
+.markdown-body p {
+  margin: 0 0 8px 0; /* 단락 사이에 약간의 여백 추가 */
+}
+.markdown-body p:last-child {
+  margin-bottom: 0;
+}
+.markdown-body ul, .markdown-body ol {
+  padding-left: 20px;
+  margin-top: 8px;
+  margin-bottom: 8px;
+}
+.markdown-body li {
+  margin-bottom: 4px;
+}
+.markdown-body code {
+  background-color: rgba(0, 0, 0, 0.05);
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-family: monospace;
+}
+.markdown-body pre {
+  background-color: #2d2d2d;
+  color: #f1f1f1;
+  padding: 12px;
+  border-radius: 8px;
+  overflow-x: auto;
+}
+.markdown-body pre code {
+  background-color: transparent;
+  padding: 0;
+}
+.markdown-body blockquote {
+  margin: 0;
+  padding-left: 12px;
+  border-left: 3px solid #ccc;
+  color: #666;
+}
+
+

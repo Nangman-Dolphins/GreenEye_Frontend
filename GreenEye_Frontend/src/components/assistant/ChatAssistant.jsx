@@ -2,14 +2,16 @@
 import React, { useState, useRef, useEffect, useContext, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+// ✅ 1단계: 마크다운 라이브러리를 import 합니다.
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
-// ✅ 이전 코드의 안정적인 localStorage 방식을 다시 가져옵니다.
+// 이전 코드의 안정적인 localStorage 방식을 그대로 사용합니다.
 const LS_CONV_ID_KEY = 'greeneye_conversation_id';
 
 function getOrCreateConvId() {
   const saved = localStorage.getItem(LS_CONV_ID_KEY);
   if (saved) return saved;
-  // 간단하고 유니크한 ID 생성
   const newId = `conv_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
   localStorage.setItem(LS_CONV_ID_KEY, newId);
   return newId;
@@ -28,7 +30,6 @@ export default function ChatAssistant() {
   const navigate = useNavigate();
   const { authFetch, token } = useContext(AuthContext);
 
-  // ✅ useParams 대신 localStorage와 state로 대화 ID를 관리합니다.
   const [convId, setConvId] = useState(() => getOrCreateConvId());
   
   const [messages, setMessages] = useState([]);
@@ -43,7 +44,6 @@ export default function ChatAssistant() {
   };
   useEffect(scrollToBottom, [messages]);
 
-  // ✅ 컴포넌트가 처음 로딩되거나 convId가 바뀔 때만 대화 기록을 불러옵니다.
   useEffect(() => {
     const loadHistory = async () => {
       if (!token || !convId) return;
@@ -54,13 +54,14 @@ export default function ChatAssistant() {
         if (!res.ok) throw new Error('대화 기록을 불러오는데 실패했습니다.');
         
         const data = await res.json();
+        // 이미지 URL도 함께 처리하도록 수정
         if (data.messages && data.messages.length > 0) {
             setMessages(data.messages.map(m => ({
               who: m.role === 'user' ? 'user' : 'bot',
-              text: m.content
+              text: m.content,
+              image: m.image_url || null // 백엔드에서 image_url을 보낸다는 가정
             })));
         } else {
-            // 기록이 없으면 초기 메시지 표시
             setMessages([{ who: 'bot', text: '안녕하세요! 무엇을 도와드릴까요?' }]);
         }
       } catch (error) {
@@ -97,7 +98,6 @@ export default function ChatAssistant() {
       imageBase64 = await fileToDataURL(imgFile);
     }
     
-    // 만약 초기 메시지 상태였다면, 사용자 메시지로 교체
     setMessages(prev => (prev.length === 1 && prev[0].text.includes('무엇을 도와드릴까요?')) 
       ? [userMessage] 
       : [...prev, userMessage]
@@ -111,7 +111,7 @@ export default function ChatAssistant() {
     try {
       const payload = {
         prompt: userPrompt || '이 이미지에 대해 설명해주세요.',
-        conversation_id: convId, // localStorage에서 가져온 ID 사용
+        conversation_id: convId,
         ...(imageBase64 && { image: imageBase64 }),
       };
 
@@ -128,8 +128,6 @@ export default function ChatAssistant() {
       const data = await res.json();
       setMessages(prev => [...prev, { who: 'bot', text: data.answer }]);
       
-      // ✅ 문제의 원인이었던 navigate 호출을 완전히 제거합니다.
-
     } catch (error) {
       setMessages(prev => [...prev, { who: 'bot', text: `오류: ${error.message}`, error: true }]);
     } finally {
@@ -137,36 +135,40 @@ export default function ChatAssistant() {
     }
   }, [input, imgFile, imgPreview, isLoading, authFetch, convId, token]);
   
-  // ✅ 새 대화 시작 기능 추가
   const startNewChat = () => {
     if(window.confirm('새로운 대화를 시작할까요? 현재 대화 ID가 변경됩니다.')) {
         localStorage.removeItem(LS_CONV_ID_KEY);
         const newId = getOrCreateConvId();
-        setConvId(newId); // 이 상태 변경이 useEffect를 트리거하여 새 대화 로딩
+        setConvId(newId);
     }
   };
 
-
   return (
     <div style={styles.container}>
-        <div style={styles.header}>
-            <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
-                ← 대시보드로 돌아가기
-            </button>
-            {/* ✅ 새 대화 시작 버튼 */}
-            <button onClick={startNewChat} style={styles.newChatButton}>
-                새 대화 시작
-            </button>
-        </div>
+      <div style={styles.header}>
+        <button onClick={() => navigate('/dashboard')} style={styles.backButton}>
+          ← 대시보드로 돌아가기
+        </button>
+        <button onClick={startNewChat} style={styles.newChatButton}>
+          새 대화 시작
+        </button>
+      </div>
 
       <div style={styles.chatWindow}>
-        {/* ... 렌더링 영역은 기존과 동일 ... */}
         <div style={styles.messageArea}>
           {messages.map((m, i) => (
             <div key={i} style={styles.messageRow(m.who)}>
               <div style={styles.messageBubble(m.who, m.error)}>
                 {m.image && <img src={m.image} alt="사용자 업로드" style={styles.imageInBubble} />}
-                {m.text && <p style={{margin: 0}}>{m.text}</p>}
+                
+                {/* ✅ 2단계: <p> 태그 대신 ReactMarkdown 컴포넌트를 사용합니다. */}
+                {m.text && (
+                    <div className="markdown-body">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                            {m.text}
+                        </ReactMarkdown>
+                    </div>
+                )}
               </div>
             </div>
           ))}
@@ -206,63 +208,63 @@ export default function ChatAssistant() {
   );
 }
 
-// 스타일 객체
+// 원래 코드의 초록색 테마 스타일 객체를 그대로 사용합니다.
 const styles = {
-  container: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    width: '100%', minHeight: '100vh', background: 'var(--ge-bg, #f3f4f6)', padding: '16px'
-  },
-  header: {
-    width: '100%',
-    maxWidth: '800px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    marginBottom: '16px',
-  },
-  backButton: {
-    padding: '8px 16px', border: '1px solid #d1d5db', background: '#fff', color: '#111827',
-    borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold'
-  },
-  newChatButton: {
-    padding: '8px 16px', border: '1px solid #16a34a', background: '#dcfce7', color: '#166534',
-    borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold'
-  },
-  chatWindow: {
-    width: '100%', maxWidth: '800px', height: 'calc(100vh - 120px)',
-    display: 'flex', flexDirection: 'column',
-    background: '#fff', borderRadius: '12px', overflow: 'hidden',
-    boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
-  },
-  messageArea: { flex: 1, padding: '20px', overflowY: 'auto' },
-  messageRow: (who) => ({
-    display: 'flex', justifyContent: who === 'user' ? 'flex-end' : 'flex-start', margin: '10px 0'
-  }),
-  messageBubble: (who, error) => ({
-    maxWidth: '75%', padding: '12px 16px', borderRadius: '18px',
-    background: error ? '#fee2e2' : (who === 'user' ? '#16a34a' : '#e5e7eb'),
-    color: error ? '#b91c1c' : (who === 'user' ? '#fff' : '#111827'),
-    lineHeight: 1.5, wordBreak: 'break-word'
-  }),
-  imageInBubble: {
-    maxWidth: '250px', width: '100%', borderRadius: '10px', display: 'block', marginBottom: '8px'
-  },
-  inputArea: {
-    display: 'flex', alignItems: 'center', gap: '8px', padding: '12px',
-    borderTop: '1px solid #e5e7eb', background: '#fff'
-  },
-  previewBox: {
-    position: 'relative', height: '40px', padding: '4px',
-    background: '#f3f4f6', borderRadius: '6px'
-  },
-  fileLabel: {
-    fontSize: '24px', cursor: 'pointer', color: '#6b7280', padding: '8px'
-  },
-  textInput: {
-    flex: 1, padding: '12px', border: '1px solid #d1d5db',
-    borderRadius: '20px', background: '#f9fafb'
-  },
-  sendButton: {
-    padding: '12px 20px', border: 'none', borderRadius: '20px',
-    background: '#66B548', color: '#fff', fontWeight: 'bold', cursor: 'pointer'
-  }
+    container: {
+        display: 'flex', flexDirection: 'column', alignItems: 'center',
+        width: '100%', minHeight: '100vh', background: 'var(--ge-bg, #f3f4f6)', padding: '16px'
+    },
+    header: {
+        width: '100%',
+        maxWidth: '800px',
+        display: 'flex',
+        justifyContent: 'space-between',
+        marginBottom: '16px',
+    },
+    backButton: {
+        padding: '8px 16px', border: '1px solid #d1d5db', background: '#fff', color: '#111827',
+        borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold'
+    },
+    newChatButton: {
+        padding: '8px 16px', border: '1px solid #16a34a', background: '#dcfce7', color: '#166534',
+        borderRadius: '999px', cursor: 'pointer', fontWeight: 'bold'
+    },
+    chatWindow: {
+        width: '100%', maxWidth: '800px', height: 'calc(100vh - 120px)',
+        display: 'flex', flexDirection: 'column',
+        background: '#fff', borderRadius: '12px', overflow: 'hidden',
+        boxShadow: '0 4px 12px rgba(0,0,0,0.1)'
+    },
+    messageArea: { flex: 1, padding: '20px', overflowY: 'auto' },
+    messageRow: (who) => ({
+        display: 'flex', justifyContent: who === 'user' ? 'flex-end' : 'flex-start', margin: '10px 0'
+    }),
+    messageBubble: (who, error) => ({
+        maxWidth: '75%', padding: '12px 16px', borderRadius: '18px',
+        background: error ? '#fee2e2' : (who === 'user' ? '#16a34a' : '#e5e7eb'),
+        color: error ? '#b91c1c' : (who === 'user' ? '#fff' : '#111827'),
+        lineHeight: 1.5, wordBreak: 'break-word'
+    }),
+    imageInBubble: {
+        maxWidth: '250px', width: '100%', borderRadius: '10px', display: 'block', marginBottom: '8px'
+    },
+    inputArea: {
+        display: 'flex', alignItems: 'center', gap: '8px', padding: '12px',
+        borderTop: '1px solid #e5e7eb', background: '#fff'
+    },
+    previewBox: {
+        position: 'relative', height: '40px', padding: '4px',
+        background: '#f3f4f6', borderRadius: '6px'
+    },
+    fileLabel: {
+        fontSize: '24px', cursor: 'pointer', color: '#6b7280', padding: '8px'
+    },
+    textInput: {
+        flex: 1, padding: '12px', border: '1px solid #d1d5db',
+        borderRadius: '20px', background: '#f9fafb'
+    },
+    sendButton: {
+        padding: '12px 20px', border: 'none', borderRadius: '20px',
+        background: '#66B548', color: '#fff', fontWeight: 'bold', cursor: 'pointer'
+    }
 };
