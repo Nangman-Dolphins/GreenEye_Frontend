@@ -1,9 +1,11 @@
 // src/components/dashboard/PlantGallery.jsx
 import React from 'react';
 
-// 식물종 문자열에서 한글만 추출
-// 예) "팬지 / 삼색제비꽃 (Pansy)" → "팬지"
-//     "라벤더 (Lavender)"          → "라벤더"
+/**
+ * 식물종 문자열에서 한글만 추출
+ * 예) "팬지 / 삼색제비꽃 (Pansy)" → "팬지"
+ *     "라벤더 (Lavender)"          → "라벤더"
+ */
 function speciesKR(s) {
   if (!s) return '';
   // 괄호 안 영문 제거
@@ -34,7 +36,7 @@ export default function PlantGallery({
     return Array.from(map.entries()).map(([room, items]) => ({ room, items }));
   }, [devices]);
 
-  // 한 줄에 최대 2개 그룹
+  // 한 줄(행)에 최대 2개 그룹
   const rows = React.useMemo(() => {
     const arr = [];
     for (let i = 0; i < groups.length; i += 2) arr.push(groups.slice(i, i + 2));
@@ -73,29 +75,42 @@ export default function PlantGallery({
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {rows.map((row, rIdx) => (
-            <div
-              key={rIdx}
-              style={{
-                display: 'grid',
-                gridTemplateColumns: row.length === 2 ? '1fr 16px 1fr' : '1fr',
-                gap: 12,
-                alignItems: 'stretch',
-              }}
-            >
-              <RoomGroup group={row[0]} selectedIndex={selectedIndex} onSelect={onSelect} />
+          {rows.map((row, rIdx) => {
+            const isTwo = row.length === 2;
+            return (
+              <div
+                key={rIdx}
+                style={{
+                  display: 'grid',
+                  // ✅ 홀수 개(3,5,7...)인 경우에도 마지막 행의 폭이 줄지 않도록 항상 2열 레이아웃 유지
+                  gridTemplateColumns: '1fr 16px 1fr',
+                  gap: 12,
+                  alignItems: 'stretch',
+                }}
+              >
+                {/* 좌측 그룹 */}
+                <RoomGroup group={row[0]} selectedIndex={selectedIndex} onSelect={onSelect} />
 
-              {row.length === 2 && (
+                {/* 가운데 점선 구분자: 그룹이 1개뿐이면 공간은 유지하되 시각적으로만 숨김 */}
                 <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'stretch' }}>
-                  <div style={{ borderLeft: '2px dotted #cbd5e1', height: '100%' }} />
+                  <div
+                    style={{
+                      borderLeft: '2px dotted #cbd5e1',
+                      height: '100%',
+                      visibility: isTwo ? 'visible' : 'hidden', // 공간 유지
+                    }}
+                  />
                 </div>
-              )}
 
-              {row.length === 2 && (
-                <RoomGroup group={row[1]} selectedIndex={selectedIndex} onSelect={onSelect} />
-              )}
-            </div>
-          ))}
+                {/* 우측 그룹: 없으면 빈 칸으로 자리만 채워 동일한 폭 유지 */}
+                {isTwo ? (
+                  <RoomGroup group={row[1]} selectedIndex={selectedIndex} onSelect={onSelect} />
+                ) : (
+                  <div aria-hidden="true" />
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
@@ -181,9 +196,9 @@ function RoomGroup({ group, selectedIndex, onSelect }) {
                       position: 'absolute',
                       top: 6,
                       right: 6,
-                      background: '#fef3c7',           // amber-100
-                      color: '#92400e',                 // amber-800
-                      border: '1px solid #fcd34d',     // amber-300
+                      background: '#fef3c7', // amber-100
+                      color: '#92400e', // amber-800
+                      border: '1px solid #fcd34d', // amber-300
                       padding: '2px 8px',
                       borderRadius: 999,
                       fontSize: 12,

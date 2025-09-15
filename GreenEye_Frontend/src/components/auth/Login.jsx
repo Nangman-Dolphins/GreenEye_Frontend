@@ -1,6 +1,8 @@
+// src/components/auth/Login.jsx
 import React, { useState, useContext } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AuthContext } from '../../context/AuthContext';
+import logo from '../../assets/greeneye_logo.png';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -24,7 +26,7 @@ export default function Login() {
       const res = await authFetch('/api/auth/login', {
         method: 'POST',
         body: JSON.stringify({ email: email.trim(), password }),
-      }); // :contentReference[oaicite:1]{index=1}
+      });
 
       if (!res.ok) {
         let msg = `로그인 실패 (status ${res.status})`;
@@ -39,7 +41,7 @@ export default function Login() {
         token = data?.token || data?.access_token || data?.jwt || null;
       } catch { /* 쿠키 세션일 수 있음 */ }
 
-      login(token || 'COOKIE_SESSION');     // :contentReference[oaicite:2]{index=2}
+      login(token || 'COOKIE_SESSION');
       localStorage.setItem('account_email', String(email).trim()); // ← 기기등록용 이메일 저장
       navigate('/dashboard', { replace: true });
     } catch (e2) {
@@ -56,15 +58,43 @@ export default function Login() {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        background: 'var(--ge-bg)',   // ← 여기만 변경
+        background: 'var(--ge-bg, #eef2f7)', // var 미정의 시 단일 톤 보장
+        padding: 16,
       }}
     >
-      <form onSubmit={onSubmit} className="login-form">
-        <h2 style={{ marginTop: 0, textAlign: 'center' }}>로그인</h2>
+      <form onSubmit={onSubmit} className="login-form" style={{
+        width: 440, maxWidth: '92vw',
+        background: '#fff', borderRadius: 16,
+        boxShadow: '0 12px 32px rgba(0,0,0,.08)',
+        padding: 24, boxSizing: 'border-box', color:'#111'
+      }}>
+        <h2 style={{ marginTop: 0, marginBottom: 12, textAlign: 'center', fontSize: 28, fontWeight: 800 }}>
+          로그인
+        </h2>
 
-        {err && <div style={{ color: 'red', marginBottom: 12 }}>{err}</div>}
+        {/* ✅ 로고: 제목과 입력창 사이 / 카드 가로폭 꽉 차게 + 확대(투명 여백 보정) */}
+        <div style={{ margin: '0 -24px 16px', overflow: 'hidden', height: 'clamp(140px, 30vw, 260px)' }}>
+          <img
+            src={logo}
+            alt="GreenEye"
+            style={{
+              display: 'block',
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              objectPosition: 'center',
+              transform: 'scale(1.9)',      // 필요시 1.6~2.3 사이로 조절
+              transformOrigin: 'center',
+              userSelect: 'none',
+              pointerEvents: 'none',
+            }}
+          />
+        </div>
 
-        {/* ✅ 예전처럼 라벨 없이 placeholder만 사용 (세로 배치) */}
+        {err && <div style={{ color: '#b91c1c', background:'#fee2e2', border:'1px solid #fecaca',
+                              padding:'8px 10px', borderRadius:8, marginBottom:12 }}>{err}</div>}
+
+        {/* ✅ 라벨 없이 placeholder 사용 (세로 배치) */}
         <input
           type="email"
           placeholder="Email"
@@ -76,7 +106,8 @@ export default function Login() {
             padding: '10px 12px',
             marginBottom: 10,
             border: '1px solid #ccc',
-            borderRadius: 4,
+            borderRadius: 8,
+            outline: 'none',
           }}
           autoComplete="email"
           required
@@ -93,7 +124,8 @@ export default function Login() {
             padding: '10px 12px',
             marginBottom: 12,
             border: '1px solid #ccc',
-            borderRadius: 4,
+            borderRadius: 8,
+            outline: 'none',
           }}
           autoComplete="current-password"
           required
@@ -108,8 +140,9 @@ export default function Login() {
             background: loading ? '#93c5fd' : '#1e40af',
             color: '#fff',
             border: 'none',
-            borderRadius: 6,
-            cursor: 'pointer',
+            borderRadius: 10,
+            fontWeight: 800,
+            cursor: loading ? 'not-allowed' : 'pointer',
           }}
         >
           {loading ? '로그인 중…' : '로그인'}
@@ -120,12 +153,13 @@ export default function Login() {
           onClick={() => navigate('/register')}
           style={{
             width: '100%',
-            padding: '10px 0',
+            padding: '12px 0',
             marginTop: 10,
             background: '#e5e7eb',
             color: '#111827',
             border: 'none',
-            borderRadius: 6,
+            borderRadius: 10,
+            fontWeight: 700,
             cursor: 'pointer',
           }}
         >
