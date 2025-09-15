@@ -58,10 +58,17 @@ const normDevice = (x = {}) => {
   return {
     deviceCode: code,
     rawCode: raw || code,
-    name: x.name ?? code,
-    imageUrl: x.device_image ?? '',
+    
+    //================= 여기 수정함 =================
+    // friendly_name 우선 사용, 없으면 name, 그 다음 deviceCode
+    name: x.friendly_name ?? x.name ?? code,
+    // device_image가 있으면 /api/images 경로로 보정
+    imageUrl: x.device_image
+      ? `/api/images/${x.device_id}/${String(x.device_image).split('/').pop()}`
+      : '',
     room: x.room ?? '',
     species: x.plant_type ?? '',
+    //================= 여기 수정함 =================
   };
 };
 
@@ -82,11 +89,14 @@ export default function Dashboard() {
 
       //const locals = readClientDevs(token).map(normDevice);
       //const legacy = read(LS_DEVICES_LEGACY, []).map(normDevice);
-
+      
+      //================= 여기 수정함 =================
       // 오프라인/로컬에서 재등록된 코드는 삭제 캐시에서 자동 복구
       const del = readDeleted(token);
-      //locals.forEach(d => del.delete(d.deviceCode));
-      write(deletedKeyForUser(token), [...del]);
+      // locals.forEach(d => del.delete(d.deviceCode)); // (로컬 목록을 쓸 때만)
+      api.forEach(d => del.delete(d.deviceCode));      // 서버가 준 기기는 항상 복구
+      write(deletedKeyForUser(token), [...del]);       // 캐시 갱신
+      //================= 여기 수정함 =================
 
       const thumbs = readThumbs(token);
       const meta   = readMeta(token);

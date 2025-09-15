@@ -36,35 +36,37 @@ function parseSensorPayload(j = {}) {
       soil:{ temp: toNum(v.soil_temp?.value),    moisture: toNum(v.soil_moisture?.value), ec: toNum(v.soil_ec?.value) },
       battery: toNum(v.battery?.value),
       status: {
-        temperature: v.temperature?.status || 'unknown',
-        humidity:    v.humidity?.status || 'unknown',
-        light_lux:   v.light_lux?.status || 'unknown',
-        soil_temp:   v.soil_temp?.status || 'unknown',
+        temperature:  v.temperature?.status   || 'unknown',
+        humidity:     v.humidity?.status      || 'unknown',
+        light_lux:    v.light_lux?.status     || 'unknown',
+        soil_temp:    v.soil_temp?.status     || 'unknown',
         soil_moisture:v.soil_moisture?.status || 'unknown',
-        soil_ec:     v.soil_ec?.status || 'unknown',
-        battery:     v.battery?.status || 'unknown',
+        soil_ec:      v.soil_ec?.status       || 'unknown',
+        battery:      v.battery?.status       || 'unknown',
       },
       ranges: {
-        temperature: v.temperature?.range || null,
-        humidity:    v.humidity?.range || null,
-        light_lux:   v.light_lux?.range || null,
-        soil_temp:   v.soil_temp?.range || null,
+        temperature:  v.temperature?.range   || null,
+        humidity:     v.humidity?.range      || null,
+        light_lux:    v.light_lux?.range     || null,
+        soil_temp:    v.soil_temp?.range     || null,
         soil_moisture:v.soil_moisture?.range || null,
-        soil_ec:     v.soil_ec?.range || null,
-        battery:     v.battery?.range || null,
+        soil_ec:      v.soil_ec?.range       || null,
+        battery:      v.battery?.range       || null,
       },
       plantType: j.plant_type || '',
       timestamp: j.timestamp || null,
       // ✅ AI 한줄평: comment 우선, 없으면 note, 문자열이면 그대로
-      aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
+      aiNote: typeof j.ai_diagnosis === 'string'
+        ? j.ai_diagnosis
+        : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
     };
     return out;
   }
 
   // 레거시(flat) 응답
-  const envTemp = j.temperature ?? j.amb_temp ?? 0;
-  const envHumi = j.humidity ?? j.amb_humi ?? 0;
-  const envLux  = j.light_lux ?? j.amb_light ?? 0;
+  const envTemp   = j.temperature ?? j.amb_temp ?? 0;
+  const envHumi   = j.humidity ?? j.amb_humi ?? 0;
+  const envLux    = j.light_lux ?? j.amb_light ?? 0;
   const soilTemp  = j.soil_temp ?? 0;
   const soilMoist = j.soil_moisture ?? j.soil_humi ?? 0;
   const soilEc    = j.soil_ec ?? 0;
@@ -78,7 +80,9 @@ function parseSensorPayload(j = {}) {
     ranges: { temperature:null, humidity:null, light_lux:null, soil_temp:null, soil_moisture:null, soil_ec:null, battery:null },
     plantType: j.plant_type || '', timestamp: j.timestamp || null,
     // ✅ 동일 규칙 유지
-    aiNote: typeof j.ai_diagnosis === 'string' ? j.ai_diagnosis : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
+    aiNote: typeof j.ai_diagnosis === 'string'
+      ? j.ai_diagnosis
+      : (j.ai_diagnosis?.comment ?? j.ai_diagnosis?.note ?? ''),
   };
 }
 
@@ -174,6 +178,36 @@ const StatusRow = ({ icon, label, value, unit, status, range }) => (
   </div>
 );
 
+/* === [NEW] 조치 필요 항목(저/고)만 문장 요약 === */
+function buildActionSummary(name, status = {}) {
+  if (!status || typeof status !== 'object') return '';
+  const out = [];
+  const get = (k) => String(status[k] || '').toLowerCase();
+
+  const push = (label, s, opts = {}) => {
+    // 정상/불명/기타 문자열은 제외하고 'low' | 'high'만 요약
+    if (s !== 'low' && s !== 'high') return;
+    if (opts.ec) {
+      out.push(s === 'low' ? '영양분 부족' : '영양분 과다');
+    } else if (opts.battery) {
+      if (s === 'low') out.push('배터리 낮음');
+    } else {
+      out.push(`${label} ${s === 'low' ? '낮음' : '높음'}`);
+    }
+  };
+
+  push('온도',        get('temperature'));
+  push('습도',        get('humidity'));
+  push('광도',        get('light_lux'));
+  push('토양 온도',   get('soil_temp'));
+  push('토양 수분',   get('soil_moisture'));
+  push('영양분',      get('soil_ec'),   { ec: true });
+  push('배터리',      get('battery'),   { battery: true });
+
+  if (!out.length) return `현재 ${name || '식물'}은(는) 전반적으로 정상이에요.`;
+  return `현재 ${name || '식물'}은(는) ${out.join(', ')}이에요.`;
+}
+
 export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
   const { authFetch } = useContext(AuthContext) || {};
   const targetId = deviceCode || plantId || '';
@@ -206,9 +240,15 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
     if (!targetId) return;
     abortRef.current?.abort();
     const ctrl = new AbortController(); abortRef.current = ctrl;
-    try { setLoading(true); const s = await fetchSensorSnapshotAPI(authFetch, targetId, ctrl.signal); setData(s); }
-    catch { setData(prev => (prev && (prev.env.temp || prev.soil.moisture || prev.battery)) ? prev : makeDummySnapshot(targetId, sensingMs)); }
-    finally { setLoading(false); }
+    try {
+      setLoading(true);
+      const s = await fetchSensorSnapshotAPI(authFetch, targetId, ctrl.signal);
+      setData(s);
+    } catch {
+      setData(prev => (prev && (prev.env.temp || prev.soil.moisture || prev.battery)) ? prev : makeDummySnapshot(targetId, sensingMs));
+    } finally {
+      setLoading(false);
+    }
   };
 
   // 최초 1회
@@ -253,6 +293,7 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
   }, [targetId, sensingMs]);
 
   const title = (deviceName && deviceName.trim()) || targetId || '미선택';
+  const oneLine = buildActionSummary(title, data.status); // [NEW]
 
   const cardWrap = { background:'#fff', borderRadius:8, boxShadow:'0 1px 4px rgba(0,0,0,0.1)', padding:16, color:'#111' };
   const grayCard = { background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:16 };
@@ -286,6 +327,17 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
       </div>
 
       {loading && <div style={{ marginTop:8, color:'#111' }}>불러오는 중…</div>}
+
+      {/* [NEW] 상태 한 줄 요약 — AI 진단 위에 표시 (디자인 유지) */}
+      <div style={{ marginTop:16, background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:16, color:'#111' }}>
+        <div style={{ fontWeight:700, marginBottom:8 }}>📌 상태 한 줄 요약</div>
+        <div
+          style={{ minHeight:22, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', lineHeight:1.4, fontSize:14 }}
+          title={oneLine}
+        >
+          {oneLine}
+        </div>
+      </div>
 
       {/* AI 진단 */}
       <div style={{ marginTop:16, background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:16, color:'#111' }}>
