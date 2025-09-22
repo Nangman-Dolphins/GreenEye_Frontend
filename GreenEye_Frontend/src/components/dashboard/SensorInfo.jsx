@@ -128,9 +128,7 @@ function makeDummySnapshot(deviceId, sensingMs) {
 const statusLabel = (s) =>
   (s==='low'?'낮음':s==='middle'?'정상':s==='high'?'높음':'불명');
 
-/**
- * 더 강한 대비의 배지 색상
- */
+/** 더 강한 대비의 배지 색상 */
 function statusTheme(s) {
   switch (s) {
     case 'low':    return { bg:'#fee2e2', br:'#fecaca', text:'#000000ff', shadow:'0 0 0 1px #991b1b, 0 3px 8px rgba(220,38,38,.25)' };
@@ -178,34 +176,37 @@ const StatusRow = ({ icon, label, value, unit, status, range }) => (
   </div>
 );
 
-/* === [NEW] 조치 필요 항목(저/고)만 문장 요약 === */
+/* === [UPDATE] 모든 조치를 그대로 표시: ‘+외 N건’ 제거 === */
 function buildActionSummary(name, status = {}) {
   if (!status || typeof status !== 'object') return '';
-  const out = [];
-  const get = (k) => String(status[k] || '').toLowerCase();
+  const s = (k) => String(status[k] || '').toLowerCase();
+  const acts = [];
+  const push = (slug, text, pr) => { if (text) acts.push({ slug, text, pr }); };
 
-  const push = (label, s, opts = {}) => {
-    // 정상/불명/기타 문자열은 제외하고 'low' | 'high'만 요약
-    if (s !== 'low' && s !== 'high') return;
-    if (opts.ec) {
-      out.push(s === 'low' ? '영양분 부족' : '영양분 과다');
-    } else if (opts.battery) {
-      if (s === 'low') out.push('배터리 낮음');
-    } else {
-      out.push(`${label} ${s === 'low' ? '낮음' : '높음'}`);
-    }
-  };
+  // 우선순위(pr): 낮을수록 중요
+  if (s('soil_moisture') === 'low')  push('water',   '물을 주세요(소량 관수)', 0);
+  if (s('soil_moisture') === 'high') push('drain',   '배수하고 물주기 간격 늘리기', 0);
+  if (s('soil_ec') === 'high')       push('flush',   '맑은 물로 세척 관수', 0);
+  if (s('soil_ec') === 'low')        push('fert',    '희석 비료 소량 보충', 1);
+  if (s('temperature') === 'high' || s('soil_temp') === 'high') push('cool', '환기·그늘로 온도 낮추기', 1);
+  if (s('temperature') === 'low'  || s('soil_temp') === 'low')  push('warm', '보온해 온도 올리기', 1);
+  if (s('battery') === 'low')        push('battery', '배터리 충전', 1);
+  if (s('light_lux') === 'low')      push('light+',  '창가로 옮겨 광량 늘리기', 2);
+  if (s('light_lux') === 'high')     push('light-',  '차광으로 광량 줄이기', 2);
+  if (s('humidity') === 'low')       push('humid+',  '분무/가습으로 습도 올리기', 3);
+  if (s('humidity') === 'high')      push('humid-',  '환기로 습도 낮추기', 3);
 
-  push('온도',        get('temperature'));
-  push('습도',        get('humidity'));
-  push('광도',        get('light_lux'));
-  push('토양 온도',   get('soil_temp'));
-  push('토양 수분',   get('soil_moisture'));
-  push('영양분',      get('soil_ec'),   { ec: true });
-  push('배터리',      get('battery'),   { battery: true });
+  // 같은 종류(slug) 중복 제거 후 우선순위 정렬
+  const uniq = [];
+  const seen = new Set();
+  acts.sort((a,b)=>a.pr-b.pr).forEach(a => { if (!seen.has(a.slug)) { seen.add(a.slug); uniq.push(a); } });
 
-  if (!out.length) return `현재 ${name || '식물'}은(는) 전반적으로 정상이에요.`;
-  return `현재 ${name || '식물'}은(는) ${out.join(', ')}이에요.`;
+  if (uniq.length === 0) {
+    return `지금 ${name || '식물'}은(는) 전반적으로 정상이에요. 관리만 유지하세요.`;
+  }
+  // ✅ 전부 표시 (”, “로 연결)
+  const all = uniq.map(a => a.text).join(', ');
+  return `핵심 조치: ${all}`;
 }
 
 export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
@@ -328,7 +329,7 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
 
       {loading && <div style={{ marginTop:8, color:'#111' }}>불러오는 중…</div>}
 
-      {/* [NEW] 상태 한 줄 요약 — AI 진단 위에 표시 (디자인 유지) */}
+      {/* 상태 한 줄 요약 — AI 진단 위에 표시 */}
       <div style={{ marginTop:16, background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:16, color:'#111' }}>
         <div style={{ fontWeight:700, marginBottom:8 }}>📌 상태 한 줄 요약</div>
         <div
