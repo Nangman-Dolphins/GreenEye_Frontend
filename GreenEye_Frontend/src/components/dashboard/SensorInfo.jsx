@@ -8,7 +8,7 @@ const DEFAULT_SENSING_MIN = 30;
 const ICON_SIZE = 16;
 
 /* ✅ 피드백 표시 방식: 'auto' | 'lines' | 'grid' 
-   - 'auto': 항목 ≤3 → 줄바꿈(lines), 그 외 → 2열 그리드(grid) */
+   - 'auto': 항목 ≤3 → 줄바꿈(lines), 그 외 → 2열 그리드(grid) 바꾸고 싶으면 바꾸기 가능 */
 const ACTION_LAYOUT = 'grid';
 
 /* 센싱 주기 읽기(ms) */
