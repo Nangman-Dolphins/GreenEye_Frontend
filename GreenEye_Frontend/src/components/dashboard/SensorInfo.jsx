@@ -7,8 +7,7 @@ const LS_SETTINGS = 'greeneye_settings';
 const DEFAULT_SENSING_MIN = 30;
 const ICON_SIZE = 16;
 
-/* ✅ 피드백 표시 방식: 'auto' | 'lines' | 'grid' 
-   - 'auto': 항목 ≤3 → 줄바꿈(lines), 그 외 → 2열 그리드(grid) 바꾸고 싶으면 바꾸기 가능 */
+/* ✅ 피드백 표시 방식: 'auto' | 'lines' | 'grid'  */
 const ACTION_LAYOUT = 'grid';
 
 /* 센싱 주기 읽기(ms) */
@@ -164,7 +163,7 @@ function buildActionsList(status = {}) {
   const acts = [];
   const push = (slug, text, pr) => { if (text) acts.push({ slug, text, pr }); };
 
-  // 우선순위: 수분/EC/온도/배터리 → 광도 → 습도
+  // 우선순위
   if (s('soil_moisture') === 'low')  push('water',   '물을 주세요 (소량 관수)', 0);
   if (s('soil_moisture') === 'high') push('drain',   '배수하고 물주기 간격 늘리기', 0);
   if (s('soil_ec') === 'high')       push('flush',   '맑은 물로 세척 관수', 0);
@@ -177,7 +176,6 @@ function buildActionsList(status = {}) {
   if (s('humidity') === 'low')       push('humid+',  '분무/가습으로 습도 올리기', 3);
   if (s('humidity') === 'high')      push('humid-',  '환기로 습도 낮추기', 3);
 
-  // 중복 제거 + 우선순 정렬
   const uniq = [];
   const seen = new Set();
   acts.sort((a,b)=>a.pr-b.pr).forEach(a => { if (!seen.has(a.slug)) { seen.add(a.slug); uniq.push(a); } });
@@ -201,6 +199,12 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
   const [kick, setKick] = useState(0);
   const abortRef = useRef(null);
   const timerRef = useRef(null);
+
+  /* ▼ 추가: 최신 이미지 모달 상태 */
+  const [imgOpen, setImgOpen] = useState(false);
+  const [imgLoading, setImgLoading] = useState(false);
+  const [imgErr, setImgErr] = useState('');
+  const [imgInfo, setImgInfo] = useState(null); // { image_url, timestamp, friendly_name }
 
   /* 설정 변경 감지 */
   useEffect(() => {
@@ -268,6 +272,30 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetId, sensingMs]);
 
+  /* ▼ 추가: 최신 이미지 호출 */
+  const openLatestImage = async () => {
+    if (!targetId) return;
+    setImgOpen(true);
+    setImgLoading(true);
+    setImgErr('');
+    setImgInfo(null);
+    try {
+      const res = await authFetch(`/api/devices/${encodeURIComponent(targetId)}/latest-image`, { cache: 'no-store' });
+      if (!res.ok) {
+        let msg = `HTTP ${res.status}`;
+        try { const j = await res.json(); if (j?.error) msg = j.error; } catch {}
+        throw new Error(msg);
+      }
+      const j = await res.json();
+      if (!j?.image_url) throw new Error('이미지가 없습니다.');
+      setImgInfo(j);
+    } catch (e) {
+      setImgErr(e.message || '이미지를 불러오지 못했습니다.');
+    } finally {
+      setImgLoading(false);
+    }
+  };
+
   const title = (deviceName && deviceName.trim()) || targetId || '미선택';
   const actions = buildActionsList(data.status);
   const actionsTooltip = actions.join(', ');
@@ -285,9 +313,24 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
       {/* 헤더 */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
         <div style={{ fontWeight:700, fontSize:18 }}>🌱 {title} 센서 정보</div>
-        <div title="배터리 잔량"
-             style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'4px 10px', borderRadius:999, background:'#f3f4f6', fontWeight:700 }}>
-          <span role="img" aria-label="battery">🔋</span>{data.battery ?? 0}%
+        <div style={{ display:'inline-flex', alignItems:'center', gap:8 }}>
+          {/* ▼ 추가: 최신 이미지 보기 버튼 (배터리 왼쪽) */}
+          <button
+            type="button"
+            onClick={openLatestImage}
+            title="최신 사진 보기"
+            style={{
+              padding:'6px 10px', borderRadius:999, border:'1px solid #d1d5db',
+              background:'#fff', cursor:'pointer', fontWeight:700
+            }}
+          >
+            📷
+          </button>
+
+          <div title="배터리 잔량"
+               style={{ display:'inline-flex', alignItems:'center', gap:8, padding:'4px 10px', borderRadius:999, background:'#f3f4f6', fontWeight:700 }}>
+            <span role="img" aria-label="battery">🔋</span>{data.battery ?? 0}%
+          </div>
         </div>
       </div>
 
@@ -309,21 +352,19 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
 
       {loading && <div style={{ marginTop:8, color:'#111' }}>불러오는 중…</div>}
 
-      {/* 피드백(행동지시) 블록: 엔터 줄바꿈 or 2×3 그리드 */}
+      {/* 피드백(행동지시) 블록 */}
       <div style={{ marginTop:16, background:'#f8fafc', border:'1px solid #e5e7eb', borderRadius:8, padding:16, color:'#111' }}>
         <div style={{ fontWeight:700, marginBottom:8 }}>📌 조치 안내</div>
 
         {actions.length === 0 ? (
           <div style={{ opacity:.8 }}>전반적으로 정상입니다. 현재 관리를 유지하세요.</div>
         ) : layout === 'lines' ? (
-          // 줄바꿈(엔터) 형태
           <div title={actionsTooltip} style={{ lineHeight:1.5 }}>
             {actions.map((t, i) => (
               <div key={i} style={{ marginBottom:4 }}>{t}</div>
             ))}
           </div>
         ) : (
-          // 2열 그리드(머릿말 스타일 느낌)
           <div title={actionsTooltip}
                style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, alignItems:'start' }}>
             {actions.map((t, i) => (
@@ -347,6 +388,59 @@ export default function SensorInfo({ deviceCode, plantId, deviceName = '' }) {
           {data.aiNote || 'AI 진단 한 줄이 여기에 표시됩니다.'}
         </div>
       </div>
+
+      {/* ▼ 추가: 최신 이미지 모달 */}
+      {imgOpen && (
+        <div
+          onClick={() => setImgOpen(false)}
+          style={{
+            position:'fixed', inset:0, background:'rgba(0,0,0,.5)', zIndex:9999,
+            display:'flex', alignItems:'center', justifyContent:'center', padding:16
+          }}
+        >
+          <div
+            onClick={(e)=>e.stopPropagation()}
+            style={{
+              width:'min(92vw, 940px)', maxHeight:'90vh',
+              background:'#fff', borderRadius:12, overflow:'hidden',
+              boxShadow:'0 10px 30px rgba(0,0,0,.25)'
+            }}
+          >
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid #e5e7eb' }}>
+              <div style={{ fontWeight:800 }}>
+                {imgInfo?.friendly_name || title} — 최신 사진
+                {imgInfo?.timestamp && (
+                  <span style={{ marginLeft:8, fontSize:12, color:'#6b7280' }}>
+                    {new Date(imgInfo.timestamp).toLocaleString()}
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={()=>setImgOpen(false)}
+                style={{ border:'1px solid #d1d5db', background:'#fff', borderRadius:8, padding:'6px 10px', cursor:'pointer' }}
+              >
+                닫기
+              </button>
+            </div>
+
+            <div style={{ padding:12, background:'#0b0b0b' }}>
+              {imgLoading && (
+                <div style={{ color:'#fff', padding:24, textAlign:'center' }}>불러오는 중…</div>
+              )}
+              {imgErr && !imgLoading && (
+                <div style={{ color:'#fca5a5', padding:24, textAlign:'center' }}>{imgErr}</div>
+              )}
+              {imgInfo?.image_url && !imgLoading && !imgErr && (
+                <img
+                  src={imgInfo.image_url}
+                  alt="latest"
+                  style={{ width:'100%', height:'auto', display:'block', borderRadius:8 }}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
